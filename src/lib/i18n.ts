@@ -1,0 +1,330 @@
+export const LANGS = ["en", "hi", "mr"] as const;
+export type Lang = (typeof LANGS)[number];
+
+export const LANG_LABELS: Record<Lang, string> = {
+  en: "English",
+  hi: "हिंदी",
+  mr: "मराठी",
+};
+
+type Dict = Record<string, string>;
+
+const en: Dict = {
+  "app.name": "Kabadiwala Connect",
+  "app.tagline": "Bringing informal collectors into the formal recycling chain.",
+  "nav.home": "Home",
+  "nav.prices": "Prices",
+  "nav.add": "Add",
+  "nav.lots": "Lots",
+  "nav.earnings": "Earnings",
+  "nav.deals": "Deals",
+  "nav.facility": "Facility",
+  "common.online": "Online",
+  "common.offline": "Offline",
+  "common.save": "Save",
+  "common.cancel": "Cancel",
+  "common.close": "Close",
+  "common.retry": "Try again",
+  "common.verified": "Verified",
+  "common.selectRecycler": "Select Recycler",
+  "common.review": "Review",
+  "common.loading": "Loading…",
+  "home.greeting": "Turn your e-waste into value.",
+  "home.sub": "Identify, price and sell your electronic waste to authorized recyclers.",
+  "home.addEwaste": "Add E-Waste",
+  "home.lotsSold": "Lots sold",
+  "home.totalEarned": "Total earned",
+  "home.pendingLots": "Pending lots",
+  "home.safety": "Safety first",
+  "home.safetyTip": "Handle batteries carefully. Do not puncture, crush or expose damaged batteries to heat.",
+  "home.qa.prices": "Price Board",
+  "home.qa.lots": "My Lots",
+  "home.qa.earnings": "Earnings",
+  "home.qa.recyclers": "Find Recyclers",
+  "home.qa.safety": "Safety Guide",
+  "home.qa.trends": "Price Trends",
+  "add.title": "Add E-Waste",
+  "add.instruction": "Take a photo to identify your material.",
+  "add.camera": "Open Camera",
+  "add.gallery": "From Gallery",
+  "add.analyzing": "Analyzing image…",
+  "add.identified": "Material identified",
+  "add.lowConfidence": "Low confidence — please verify material.",
+  "add.aiId": "AI IDENTIFICATION",
+  "add.demoInference": "Demo inference — replace with a trained model",
+  "add.notRight": "Not right? Choose the material:",
+  "add.weight": "Approximate weight",
+  "add.condition": "Condition",
+  "add.condGood": "Good",
+  "add.condMixed": "Mixed",
+  "add.condDamaged": "Damaged",
+  "add.rate": "CURRENT INDICATIVE RATE",
+  "add.estimate": "ESTIMATED VALUE",
+  "add.disclaimer": "Indicative estimate. Final price may vary based on quality, recycler and market conditions.",
+  "add.findRecycler": "Find Authorized Recycler",
+  "add.offlineNote": "Saved offline — will sync when you're connected.",
+  "prices.title": "Price Board",
+  "prices.updated": "Updated today",
+  "prices.trends": "Price Trends",
+  "prices.disclaimer": "Prices are indicative and may vary by recycler, quality and location.",
+  "prices.days7": "7 days",
+  "prices.days30": "30 days",
+  "prices.days90": "90 days",
+  "recyclers.title": "Find Recycler",
+  "recyclers.accepting": "Authorized recyclers accepting",
+  "recyclers.nearYou": "near you",
+  "recyclers.accepts": "Accepts this material",
+  "recyclers.notAccepts": "Doesn't accept this material",
+  "recyclers.pickup": "Pickup available",
+  "lots.title": "My Lots",
+  "lots.empty": "No lots yet.",
+  "lots.emptySub": "Add e-waste to create your first digital lot.",
+  "earnings.title": "Earnings",
+  "earnings.total": "Total earnings",
+  "earnings.thisMonth": "This month",
+  "earnings.lotsSold": "Lots sold",
+  "earnings.avg": "Average per lot",
+  "handover.title": "Digital Handover",
+  "handover.verified": "Verified Digital Handover",
+  "handover.collectorConfirmed": "Collector confirmed",
+  "handover.recyclerConfirmed": "Recycler confirmed",
+  "handover.timestampRecorded": "Timestamp recorded",
+  "handover.locationRecorded": "Location recorded",
+  "handover.referenceGenerated": "Lot reference generated",
+  "payment.title": "Payment",
+  "payment.completed": "Payment completed",
+  "status.created": "Created",
+  "status.sent": "Sent to recycler",
+  "status.accepted": "Recycler quoted",
+  "status.rejected": "Rejected",
+  "status.handed_over": "Handed over",
+  "status.completed": "Completed",
+  "status.draft": "Draft",
+};
+
+const hi: Dict = {
+  "app.tagline": "अनौपचारिक कबाड़ीवालों को औपचारिक रीसायकलिंग से जोड़ना।",
+  "nav.home": "होम",
+  "nav.prices": "भाव",
+  "nav.add": "जोड़ें",
+  "nav.lots": "लॉट",
+  "nav.earnings": "कमाई",
+  "nav.deals": "सौदे",
+  "nav.facility": "फैसिलिटी",
+  "common.online": "ऑनलाइन",
+  "common.offline": "ऑफलाइन",
+  "common.save": "सेव करें",
+  "common.cancel": "रद्द करें",
+  "common.close": "बंद करें",
+  "common.retry": "फिर कोशिश करें",
+  "common.verified": "सत्यापित",
+  "common.selectRecycler": "रीसायकलर चुनें",
+  "common.review": "समीक्षा",
+  "common.loading": "लोड हो रहा है…",
+  "home.greeting": "अपना ई-कचरा मूल्य में बदलें।",
+  "home.sub": "पहचानें, भाव जानें और अपना ई-कचरा अधिकृत रीसायकलर को बेचें।",
+  "home.addEwaste": "ई-कचरा जोड़ें",
+  "home.lotsSold": "बेचे गए लॉट",
+  "home.totalEarned": "कुल कमाई",
+  "home.pendingLots": "लंबित लॉट",
+  "home.safety": "सुरक्षा पहले",
+  "home.safetyTip": "बैटरी को ध्यान से संभालें। क्षतिग्रस्त बैटरी को छेदें, कुचलें या गर्मी के पास न रखें।",
+  "home.qa.prices": "भाव बोर्ड",
+  "home.qa.lots": "मेरे लॉट",
+  "home.qa.earnings": "कमाई",
+  "home.qa.recyclers": "रीसायकलर खोजें",
+  "home.qa.safety": "सुरक्षा गाइड",
+  "home.qa.trends": "भाव रुझान",
+  "add.title": "ई-कचरा जोड़ें",
+  "add.instruction": "सामग्री पहचानने के लिए फोटो लें।",
+  "add.camera": "कैमरा खोलें",
+  "add.gallery": "गैलरी से",
+  "add.analyzing": "तस्वीर का विश्लेषण हो रहा है…",
+  "add.identified": "सामग्री पहचानी गई",
+  "add.lowConfidence": "कम विश्वास — कृपया सामग्री जाँचें।",
+  "add.aiId": "एआई पहचान",
+  "add.demoInference": "डेमो इन्फ़रेंस — असली मॉडल से बदलें",
+  "add.notRight": "सही नहीं? सामग्री चुनें:",
+  "add.weight": "अनुमानित वज़न",
+  "add.condition": "हालत",
+  "add.condGood": "अच्छी",
+  "add.condMixed": "मिश्रित",
+  "add.condDamaged": "खराब",
+  "add.rate": "वर्तमान सूचक भाव",
+  "add.estimate": "अनुमानित मूल्य",
+  "add.disclaimer": "यह अनुमानित मूल्य है। गुणवत्ता, रीसायकलर और बाज़ार के अनुसार अंतिम भाव बदल सकता है।",
+  "add.findRecycler": "अधिकृत रीसायकलर खोजें",
+  "add.offlineNote": "ऑफलाइन सेव हुआ — कनेक्शन आने पर सिंक होगा।",
+  "prices.title": "भाव बोर्ड",
+  "prices.updated": "आज अपडेट",
+  "prices.trends": "भाव रुझान",
+  "prices.disclaimer": "भाव सूचक हैं — रीसायकलर, गुणवत्ता और जगह के अनुसार बदल सकते हैं।",
+  "recyclers.title": "रीसायकलर खोजें",
+  "recyclers.nearYou": "आपके पास",
+  "recyclers.accepts": "यह सामग्री लेता है",
+  "recyclers.notAccepts": "यह सामग्री नहीं लेता",
+  "recyclers.pickup": "पिकअप उपलब्ध",
+  "lots.title": "मेरे लॉट",
+  "lots.empty": "अभी कोई लॉट नहीं।",
+  "lots.emptySub": "पहला डिजिटल लॉट बनाने के लिए ई-कचरा जोड़ें।",
+  "earnings.title": "कमाई",
+  "earnings.total": "कुल कमाई",
+  "earnings.thisMonth": "इस महीने",
+  "earnings.lotsSold": "बेचे गए लॉट",
+  "earnings.avg": "प्रति लॉट औसत",
+  "handover.title": "डिजिटल हैंडओवर",
+  "handover.verified": "सत्यापित डिजिटल हैंडओवर",
+  "handover.collectorConfirmed": "कलेक्टर ने पुष्टि की",
+  "handover.recyclerConfirmed": "रीसायकलर ने पुष्टि की",
+  "handover.timestampRecorded": "समय दर्ज",
+  "handover.locationRecorded": "जगह दर्ज",
+  "handover.referenceGenerated": "लॉट संदर्भ बना",
+  "payment.title": "भुगतान",
+  "payment.completed": "भुगतान पूरा",
+  "status.created": "बनाया गया",
+  "status.sent": "रीसायकलर को भेजा",
+  "status.accepted": "कोटेशन मिला",
+  "status.rejected": "अस्वीकृत",
+  "status.handed_over": "हैंडओवर पूरा",
+  "status.completed": "पूर्ण",
+  "status.draft": "ड्राफ़्ट",
+};
+
+const mr: Dict = {
+  "app.tagline": "अनौपचारिक कबाडीवाल्यांना औपचारिक रिसायकलिंगशी जोडणे.",
+  "nav.home": "होम",
+  "nav.prices": "भाव",
+  "nav.add": "जोडा",
+  "nav.lots": "लॉट",
+  "nav.earnings": "कमाई",
+  "nav.deals": "सौदे",
+  "nav.facility": "फॅसिलिटी",
+  "common.online": "ऑनलाइन",
+  "common.offline": "ऑफलाइन",
+  "common.save": "सेव करा",
+  "common.cancel": "रद्द करा",
+  "common.close": "बंद करा",
+  "common.retry": "पुन्हा प्रयत्न करा",
+  "common.verified": "सत्यापित",
+  "common.selectRecycler": "रिसायकलर निवडा",
+  "common.review": "तपासणी",
+  "common.loading": "लोड होत आहे…",
+  "home.greeting": "तुमचा ई-कचरा मूल्यात बदला.",
+  "home.sub": "ओळखा, भाव जाणून घ्या आणि अधिकृत रिसायकलरला विका.",
+  "home.addEwaste": "ई-कचरा जोडा",
+  "home.lotsSold": "विकलेले लॉट",
+  "home.totalEarned": "एकूण कमाई",
+  "home.pendingLots": "प्रलंबित लॉट",
+  "home.safety": "सुरक्षितता आधी",
+  "home.safetyTip": "बॅटरी काळजीपूर्वक हाताळा. खराब बॅटरी टोचू नका, चिरडू नका किंवा उष्णतेजवळ ठेवू नका.",
+  "home.qa.prices": "भाव फलक",
+  "home.qa.lots": "माझे लॉट",
+  "home.qa.earnings": "कमाई",
+  "home.qa.recyclers": "रिसायकलर शोधा",
+  "home.qa.safety": "सुरक्षितता मार्गदर्शक",
+  "home.qa.trends": "भाव कल",
+  "add.title": "ई-कचरा जोडा",
+  "add.instruction": "वस्तू ओळखण्यासाठी फोटो काढा.",
+  "add.camera": "कॅमेरा उघडा",
+  "add.gallery": "गॅलरीतून",
+  "add.analyzing": "फोटोचे विश्लेषण सुरू…",
+  "add.identified": "वस्तू ओळखली",
+  "add.lowConfidence": "कमी खात्री — कृपया वस्तू तपासा.",
+  "add.aiId": "एआय ओळख",
+  "add.demoInference": "डेमो इन्फरन्स — खऱ्या मॉडेलने बदला",
+  "add.notRight": "बरोबर नाही? वस्तू निवडा:",
+  "add.weight": "अंदाजे वजन",
+  "add.condition": "स्थिती",
+  "add.condGood": "चांगली",
+  "add.condMixed": "मिश्रित",
+  "add.condDamaged": "खराब",
+  "add.rate": "सध्याचा सूचक भाव",
+  "add.estimate": "अंदाजित मूल्य",
+  "add.disclaimer": "हा अंदाजित मूल्य आहे. गुणवत्ता, रिसायकलर व बाजारानुसार अंतिम भाव बदलू शकतो.",
+  "add.findRecycler": "अधिकृत रिसायकलर शोधा",
+  "add.offlineNote": "ऑफलाइन सेव झाले — कनेक्शन आल्यावर सिंक होईल.",
+  "prices.title": "भाव फलक",
+  "prices.updated": "आज अपडेट",
+  "prices.trends": "भाव कल",
+  "prices.disclaimer": "भाव सूचक आहेत — रिसायकलर, गुणवत्ता व ठिकाणानुसार बदलू शकतात.",
+  "recyclers.title": "रिसायकलर शोधा",
+  "recyclers.nearYou": "तुमच्या जवळ",
+  "recyclers.accepts": "ही वस्तू स्वीकारतो",
+  "recyclers.notAccepts": "ही वस्तू स्वीकारत नाही",
+  "recyclers.pickup": "पिकअप उपलब्ध",
+  "lots.title": "माझे लॉट",
+  "lots.empty": "अजून लॉट नाही.",
+  "lots.emptySub": "पहिला डिजिटल लॉट बनवण्यासाठी ई-कचरा जोडा.",
+  "earnings.title": "कमाई",
+  "earnings.total": "एकूण कमाई",
+  "earnings.thisMonth": "या महिन्यात",
+  "earnings.lotsSold": "विकलेले लॉट",
+  "earnings.avg": "प्रति लॉट सरासरी",
+  "handover.title": "डिजिटल हॅंडओव्हर",
+  "handover.verified": "सत्यापित डिजिटल हॅंडओव्हर",
+  "handover.collectorConfirmed": "कलेक्टरची खात्री",
+  "handover.recyclerConfirmed": "रिसायकलरची खात्री",
+  "handover.timestampRecorded": "वेळ नोंदवली",
+  "handover.locationRecorded": "ठिकाण नोंदवले",
+  "handover.referenceGenerated": "लॉट संदर्भ तयार",
+  "payment.title": "पेमेंट",
+  "payment.completed": "पेमेंट पूर्ण",
+  "status.created": "तयार",
+  "status.sent": "रिसायकलरला पाठवले",
+  "status.accepted": "कोटेशन आले",
+  "status.rejected": "नाकारले",
+  "status.handed_over": "हॅंडओव्हर पूर्ण",
+  "status.completed": "पूर्ण",
+  "status.draft": "मसुदा",
+};
+
+const DICTS: Record<Lang, Dict> = { en, hi, mr };
+
+export function translate(lang: Lang, key: string): string {
+  return DICTS[lang][key] ?? DICTS.en[key] ?? key;
+}
+
+const LANG_KEY = "kc.lang";
+
+export function loadLang(): Lang {
+  try {
+    const v = localStorage.getItem(LANG_KEY);
+    if (v && (LANGS as readonly string[]).includes(v)) return v as Lang;
+  } catch {
+    /* private mode */
+  }
+  return "en";
+}
+
+export function saveLang(lang: Lang) {
+  try {
+    localStorage.setItem(LANG_KEY, lang);
+  } catch {
+    /* private mode */
+  }
+}
+
+// ---- Spoken price readout (browser speech synthesis; no external API) -----
+
+const NUMBER_WORDS_EN = [
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+];
+
+function digitsToWords(n: number): string {
+  return Math.round(n)
+    .toString()
+    .split("")
+    .map((d) => NUMBER_WORDS_EN[Number(d)])
+    .join(" ");
+}
+
+export function spokenPriceSentence(materialName: string, price: number, unit: string, lang: Lang): string {
+  const words = digitsToWords(price);
+  if (lang === "hi") {
+    return `${materialName}. ${words} रुपये प्रति किलो.`;
+  }
+  if (lang === "mr") {
+    return `${materialName}. ${words} रुपये प्रति किलो.`;
+  }
+  return `${materialName}. ${words} rupees per ${unit}.`;
+}
