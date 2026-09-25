@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
@@ -8,11 +8,11 @@ import {
 import { ClayButton, ClayCard, ClayBadge, Field, ClayInput, EmptyState, LoadingState } from "@/components/ui/kit";
 import { useAppState, pushToast } from "@/lib/app-state";
 import { formatINR, formatKg, formatDateTime, timeAgo } from "@/lib/format";
-import { useMaterials, useProfile } from "@/hooks/use-kc-data";
+import { useMaterials, useProfile, useAvailableLots, useLotDetail } from "@/hooks/use-kc-data";
 
 export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers"> }) {
   const { t } = useAppState();
-  const incoming = useQuery(api.lots.listAvailableLots, {});
+  const incoming = useAvailableLots();
   const { materials } = useMaterials();
   const profile = useProfile();
   const [reviewing, setReviewing] = useState<string | null>(null);
@@ -115,7 +115,7 @@ function ReviewLot({
   onBack: () => void;
 }) {
   const { t } = useAppState();
-  const data = useQuery(api.lots.getLot, { lotId });
+  const data = useLotDetail(lotId); // offline-aware (same return shape)
   const { materials } = useMaterials();
   const quoteLot = useMutation(api.lots.quoteLot);
 

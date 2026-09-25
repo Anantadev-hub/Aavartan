@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
@@ -8,7 +8,7 @@ import {
 import { ClayButton, ClayCard, ClayBadge, EmptyState, LoadingState } from "@/components/ui/kit";
 import { useAppState, pushToast } from "@/lib/app-state";
 import { formatINR } from "@/lib/format";
-import { useMaterials, useProfile } from "@/hooks/use-kc-data";
+import { useMaterials, useProfile, useMatchedRecyclers } from "@/hooks/use-kc-data";
 import { cn } from "@/lib/utils";
 
 type SortMode = "match" | "distance" | "rate";
@@ -37,7 +37,8 @@ export default function FindRecycler({
   const mat = materialCode ?? "pcb";
   const matName = materials?.find((m) => m.code === mat)?.name ?? mat.toUpperCase();
 
-  const results = useQuery(api.recyclers.matchRecyclers, {
+  // Offline-aware matching hook (same args/return as the previous useQuery).
+  const results = useMatchedRecyclers({
     materialCode: mat,
     weightKg: weightKg && weightKg > 0 ? weightKg : undefined,
     verifiedOnly,

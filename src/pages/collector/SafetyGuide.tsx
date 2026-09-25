@@ -1,14 +1,13 @@
 import { useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { ChevronLeftIcon, SpeakerIcon, WarningIcon } from "@/components/icons";
 import { ClayCard, LoadingState, ClayBadge } from "@/components/ui/kit";
 import { useAppState, speak } from "@/lib/app-state";
+import { useSafetyGuides } from "@/hooks/use-kc-data";
 import { cn } from "@/lib/utils";
 
 export default function SafetyGuide({ onClose }: { onClose: () => void }) {
   const { t, lang } = useAppState();
-  const guides = useQuery(api.materials.listSafetyGuides, {});
+  const guides = useSafetyGuides(); // offline-aware (same return shape)
   const [openCode, setOpenCode] = useState<string | null>("battery");
 
   if (guides === undefined) {

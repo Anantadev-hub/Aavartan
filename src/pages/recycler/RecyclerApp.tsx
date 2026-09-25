@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
@@ -9,7 +9,7 @@ import {
 } from "@/components/icons";
 import { ClayButton, ClayCard, ClayBadge, LoadingState, OfflineBanner, Toasts, SyncIndicator } from "@/components/ui/kit";
 import { useAppState, setOnline } from "@/lib/app-state";
-import { useProfile, useRecyclerStats, useAvailableLots, useMaterials } from "@/hooks/use-kc-data";
+import { useProfile, useRecyclerStats, useAvailableLots, useMaterials, useFacility } from "@/hooks/use-kc-data";
 import { formatINR, timeAgo, formatKg } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import RecyclerLots from "./RecyclerLots";
@@ -232,7 +232,7 @@ function RecyclerDashboard({
 /* ------------------------------ Facility -------------------------------- */
 
 function RecyclerFacility({ recyclerId }: { recyclerId: Id<"recyclers"> }) {
-  const facility = useQuery(api.recyclers.getRecycler, { recyclerId });
+  const facility = useFacility(recyclerId); // offline-aware (same return shape)
   const { materials } = useMaterials();
   const { t } = useAppState();
 

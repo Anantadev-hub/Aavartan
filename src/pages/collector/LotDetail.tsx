@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { QRCodeSVG } from "qrcode.react";
@@ -10,14 +10,15 @@ import { ClayButton, ClayCard, ClayBadge, StatusPill, LoadingState } from "@/com
 import { Timeline } from "@/components/ui/timeline";
 import { useAppState, pushToast } from "@/lib/app-state";
 import { formatINR, formatKg, formatDateTime } from "@/lib/format";
-import { useMaterials, useProfile } from "@/hooks/use-kc-data";
+import { useMaterials, useProfile, useLotDetail, useLotTimeline } from "@/hooks/use-kc-data";
 import { cn } from "@/lib/utils";
 
 export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | string; onBack: () => void }) {
   const { t, online } = useAppState();
   const profile = useProfile();
-  const data = useQuery(api.lots.getLot, { lotId: lotId as never });
-  const timeline = useQuery(api.lots.lotTimeline, { lotId: lotId as never });
+  // Offline-aware data hooks (same return shapes as the previous useQuery calls).
+  const data = useLotDetail(lotId);
+  const timeline = useLotTimeline(lotId);
   const { materials } = useMaterials();
 
   const confirmHandover = useMutation(api.lots.confirmHandover);

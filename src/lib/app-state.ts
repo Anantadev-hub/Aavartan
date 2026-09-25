@@ -82,7 +82,39 @@ const store = {
   syncState: "idle" as SyncState,
   lastSyncMessage: null as string | null,
   toasts: [] as Toast[],
+  // Sync reliability (data layer): cooldown between failed attempts so a bad
+  // connection can't cause a hot retry loop, and per-draft attempt counts so
+  // one un-syncable record can't poison the whole batch forever.
+  syncCooldownUntil: 0,
+  syncInProgress: false,
 };
+
+const ATTEMPTS_KEY = "kc.syncAttempts";
+const MAX_ATTEMPTS = 4;
+const SYNC_COOLDOWN_MS = 20_000;
+
+function readAttempts(): Record<string, number> {
+  return readJSON<Record<string, number>>(ATTEMPTS_KEY, {});
+}
+
+function writeAttempts(a: Record<string, number>) {
+  writeJSON(ATTEMPTS_KEY, a);
+}
+
+function bumpAttempts(clientRef: string): number {
+  const a = readAttempts();
+  a[clientRef] = (a[clientRef] ?? 0) + 1;
+  writeAttempts(a);
+  return a[clientRef];
+}
+
+function clearAttempts(clientRef: string) {
+  const a = readAttempts();
+  if (a[clientRef] !== undefined) {
+    delete a[clientRef];
+    writeAttempts(a);
+  }
+}
 
 function emit() {
   for (const fn of listeners) fn();
@@ -202,6 +234,13 @@ export function useAppState(): AppContextValue {
 }
 
 // ---- Sync worker: flush the queue when we come back online -----------------
+// Reliability rules (all data-layer; no UI impact):
+//   1. One batch call first — keeps the happy path to a single mutation.
+//   2. If the batch fails, retry draft-by-draft so a single oversized/bad
+//      record can't block the rest of the queue.
+//   3. Failing drafts accumulate attempts; after MAX_ATTEMPTS they stay saved
+//      locally but are excluded from auto-sync (never silently destroyed).
+//   4. A cooldown after any failure prevents a hot retry loop.
 
 export function useSyncWorker(
   onSync: (drafts: QueuedDraft[]) => Promise<{ synced: number }>,
@@ -210,26 +249,72 @@ export function useSyncWorker(
   const { online, queue, syncState } = useAppState();
 
   useEffect(() => {
-    if (!enabled || !online || queue.length === 0 || syncState === "syncing") return;
-    let cancelled = false;
+    if (!enabled || !online || queue.length === 0) return;
+    if (store.syncInProgress) return;
+    if (syncState === "syncing") return;
+
+    // Cooldown after a failed round: wake ourselves when it expires.
+    if (Date.now() < store.syncCooldownUntil) {
+      const remaining = store.syncCooldownUntil - Date.now() + 50;
+      const id = setTimeout(() => emit(), remaining);
+      return () => clearTimeout(id);
+    }
+
+    // Syncable = not permanently excluded by repeated failures.
+    const snapshot = queue.filter(
+      (d) => (readAttempts()[d.clientRef] ?? 0) < MAX_ATTEMPTS,
+    );
+    if (snapshot.length === 0) return;
+
+    store.syncInProgress = true;
     (async () => {
       setSyncState("syncing");
+      const succeeded: string[] = [];
+      let syncedTotal = 0;
+      let hardFail = false;
       try {
-        const res = await onSync(queue);
-        if (cancelled) return;
-        for (const d of queue) removeQueued(d.clientRef);
-        setSyncState("done", `${res.synced} records synced successfully.`);
-        setTimeout(() => setSyncState("idle"), 2600);
+        // Fast path: one batch.
+        const res = await onSync(snapshot);
+        syncedTotal = res.synced;
+        for (const d of snapshot) succeeded.push(d.clientRef);
       } catch {
-        if (!cancelled) {
-          setSyncState("idle");
-          pushToast("Sync failed — will retry when online.", "error");
+        // Fallback: draft-by-draft isolation.
+        syncedTotal = 0;
+        succeeded.length = 0;
+        for (const d of snapshot) {
+          try {
+            const res = await onSync([d]);
+            syncedTotal += res.synced;
+            succeeded.push(d.clientRef);
+            clearAttempts(d.clientRef);
+          } catch {
+            const attempts = bumpAttempts(d.clientRef);
+            if (attempts >= MAX_ATTEMPTS) hardFail = true;
+          }
+        }
+      }
+
+      for (const ref of succeeded) {
+        removeQueued(ref);
+        clearAttempts(ref);
+      }
+      store.syncInProgress = false;
+
+      const remaining = store.queue.length;
+      if (remaining === 0 && !hardFail) {
+        setSyncState("done", `${syncedTotal} records synced successfully.`);
+        setTimeout(() => setSyncState("idle"), 2600);
+      } else {
+        store.syncCooldownUntil = Date.now() + SYNC_COOLDOWN_MS;
+        setSyncState("idle");
+        if (hardFail) {
+          pushToast(
+            "Some records couldn't sync — they stay saved on this device.",
+            "error",
+          );
         }
       }
     })();
-    return () => {
-      cancelled = true;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, online, queue.length, syncState]);
 }
