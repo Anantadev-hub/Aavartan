@@ -21,7 +21,7 @@ This is a **prototype**. Wherever a capability is mocked, the UI and code say so
 | Authorization status | Clearly labelled "authorized (demo)" — **no real government IDs anywhere** | CPCB EPR registry integration |
 | Handover integrity | Demo checksum (FNV-style hash), labelled "tamper-evident concept" | Server-side signatures / append-only ledger |
 | Payments | Simulated cash/UPI marking only — no money moves | UPI collect / PG webhooks |
-| Authentication | Convex anonymous sessions + role profile (mock sign-in) | Phone + OTP (structure already separated from role selection) |
+| Authentication | Mock OTP flow (configurable `VITE_DEMO_OTP`, default 482913) + Convex anonymous sessions; full journey: Login → OTP → Role → Onboarding | Phone + OTP via SMS gateway behind `src/lib/auth-service.ts` seams |
 | Offline sync | localStorage queue + idempotent `/sync`-style Convex mutation | IndexedDB (localForage) + background sync worker |
 | Photos | Client-side compressed JPEG stored inline | Object storage (Supabase Storage / S3) |
 
