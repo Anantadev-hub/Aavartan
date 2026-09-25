@@ -1,9 +1,15 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { cacheRecentPrices, getRecentPrices } from "@/lib/app-state";
 import { cachedOrUndefined, writeCache } from "@/lib/offline-cache";
+import {
+  loadPendingProfile,
+  markPendingProfileSynced,
+  type PendingProfile,
+} from "@/lib/auth-service";
 
 // ---------------------------------------------------------------------------
 // Data hooks. Online behaviour is unchanged — the same Convex queries run and
@@ -13,6 +19,22 @@ import { cachedOrUndefined, writeCache } from "@/lib/offline-cache";
 // ---------------------------------------------------------------------------
 
 export type MaterialRow = Doc<"materials">;
+
+/**
+ * Profile result: either the live backend profile or a locally-synthesized
+ * "Pending Sync" profile created during offline onboarding. Local profiles
+ * have no `_id`, so all dependent queries naturally skip (no invalid-id calls).
+ * Only collector-role onboarding synthesizes a local profile — recycler
+ * facilities need a bound backend facility and fall back to sign-in as before.
+ */
+export type AppProfile =
+  | Doc<"profiles">
+  | (Omit<PendingProfile, "role"> & {
+      role: "collector" | "recycler";
+      isLocalProfile: true;
+      _id?: undefined;
+      recyclerId?: undefined;
+    });
 
 // Shapes mirrored from the Convex query results so cached fallbacks are
 // type-identical to the live data (UI code needs no changes).
@@ -33,14 +55,57 @@ type RecyclerStats = {
 };
 
 /** Signed-in user's profile (collector or recycler role). */
-export function useProfile() {
+export function useProfile(): AppProfile | Doc<"profiles"> | null | undefined {
   const live = useQuery(api.profiles.myProfile, {});
-  const cached = cachedOrUndefined<Doc<"profiles">>("profile");
+  // Read once per mount; live data always takes precedence when it exists.
+  const pending = useMemo(() => loadPendingProfile(), []);
   useEffect(() => {
     if (live) writeCache("profile", live);
   }, [live]);
-  // undefined = still resolving; cached value is used only if live stays undefined.
-  return live !== undefined ? live : cached;
+  if (live) return live;
+  const cached = cachedOrUndefined<Doc<"profiles">>("profile");
+  if (cached) return cached;
+  if (pending && pending.role === "collector") {
+    // Offline onboarding: render the app from the locally saved profile.
+    return { ...pending, isLocalProfile: true };
+  }
+  return live; // undefined = resolving; null = none (existing redirect behavior)
+}
+
+/** True when the profile is a real backend profile with a usable _id. */
+export function hasBackendId(
+  p: AppProfile | Doc<"profiles"> | null | undefined,
+): p is Doc<"profiles"> {
+  return !!p && "_id" in p && typeof (p as { _id?: unknown })._id === "string";
+}
+
+/**
+ * Opportunistic background sync for a locally onboarded profile. Called once
+ * by the app shells; when the backend is reachable the pending profile is
+ * created and marked synced — otherwise it silently stays "Pending Sync".
+ */
+export function usePendingProfileSync() {
+  const { signIn, signOut } = useAuthActions();
+  const createProfile = useMutation(api.profiles.createProfile);
+  useEffect(() => {
+    const p = loadPendingProfile();
+    if (!p || p.synced || !navigator.onLine) return;
+    void (async () => {
+      try {
+        try {
+          await signOut();
+        } catch {
+          /* no existing session — fine */
+        }
+        await signIn("anonymous");
+        await createProfile({ role: p.role, name: p.name });
+        markPendingProfileSynced();
+      } catch {
+        /* backend unreachable — profile stays pending; never blocks the UI */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 }
 
 /** Material catalogue; caches the latest copy for offline reads. */

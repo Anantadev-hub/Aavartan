@@ -6,7 +6,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { AppHeader, BottomNav, PhoneFrame, type NavTab } from "@/components/shell";
 import { OfflineBanner, LoadingState, Toasts, SyncIndicator } from "@/components/ui/kit";
 import { useAppState, useSyncWorker, setOnline } from "@/lib/app-state";
-import { useProfile } from "@/hooks/use-kc-data";
+import { useProfile, hasBackendId, usePendingProfileSync } from "@/hooks/use-kc-data";
 import CollectorHome from "./CollectorHome";
 import CollectorPrices from "./CollectorPrices";
 import AddFlow from "./AddFlow";
@@ -55,15 +55,21 @@ export default function CollectorApp() {
     };
   }, []);
 
+  // If onboarding happened offline, sync the profile in the background once
+  // connectivity is available ("Pending Sync" is invisible in the UI).
+  usePendingProfileSync();
+
   // Flush the offline queue whenever we are online and items are waiting.
+  // A locally onboarded (Pending Sync) profile has no backend id yet, so the
+  // worker stays paused until the background profile sync completes.
   const syncQueue = useMutation(api.sync.syncQueue);
   useSyncWorker(
     async (drafts) => {
-      if (!profile) throw new Error("Profile not ready");
+      if (!hasBackendId(profile)) throw new Error("Profile not ready");
       const res = await syncQueue({ collectorId: profile._id, drafts });
       return { synced: res.synced };
     },
-    profile !== null, // only when the profile is actually loaded
+    hasBackendId(profile), // only when a backend profile actually exists
   );
 
   if (profile === undefined) {

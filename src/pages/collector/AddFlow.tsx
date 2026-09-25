@@ -75,9 +75,13 @@ export default function AddFlow({
 
   const createLot = async (sendNow: boolean) => {
     if (!profile || submitting) return;
+    // A locally onboarded (Pending Sync) profile has no backend id yet, so the
+    // lot is queued for sync instead of calling the mutation with an invalid
+    // id. The sync worker applies it after the background profile sync lands.
+    const isLocalProfile = "isLocalProfile" in profile;
     setSubmitting(true);
     try {
-      if (online) {
+      if (online && !isLocalProfile) {
         const res = await createLotFn({
           collectorId: profile._id,
           materialCode: material,
@@ -95,7 +99,8 @@ export default function AddFlow({
         pushToast(`Lot ${res.referenceId} created`, "success");
         onDone(res.lotId);
       } else {
-        // Offline: queue locally; the sync worker flushes it when online.
+        // Offline (or profile still pending sync): queue locally; the sync
+        // worker flushes it once connectivity and the profile are available.
         enqueueDraft({
           materialCode: material,
           weight,

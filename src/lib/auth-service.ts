@@ -89,3 +89,70 @@ export type OnboardData = {
   facilityMaterials?: string[];
   pickupAvailable?: boolean;
 };
+
+// ---- Local pending profile (offline-first onboarding) ----------------------
+// Onboarding is ALWAYS saved locally first so the flow works with zero
+// connectivity. When the backend is reachable, the profile is created in the
+// background and the pending record is cleared. "Pending Sync" is an internal
+// state only — it never changes the UI.
+
+const PENDING_KEY = "kc.pendingProfile";
+
+export type PendingProfile = {
+  role: Role;
+  name: string;
+  phone?: string;
+  language?: string;
+  area?: string;
+  facilityMaterials?: string[];
+  pickupAvailable?: boolean;
+  savedAt: number;
+  synced: boolean;
+};
+
+export function savePendingProfile(
+  v: Omit<PendingProfile, "savedAt" | "synced">,
+) {
+  try {
+    localStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({ ...v, savedAt: Date.now(), synced: false }),
+    );
+  } catch {
+    /* private mode */
+  }
+}
+
+export function loadPendingProfile(): PendingProfile | null {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as PendingProfile;
+    if (v && (v.role === "collector" || v.role === "recycler")) return v;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function markPendingProfileSynced() {
+  try {
+    const p = loadPendingProfile();
+    if (p) {
+      localStorage.setItem(
+        PENDING_KEY,
+        JSON.stringify({ ...p, synced: true } satisfies PendingProfile),
+      );
+    }
+  } catch {
+    /* private mode */
+  }
+}
+
+export function clearPendingProfile() {
+  try {
+    localStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* private mode */
+  }
+}

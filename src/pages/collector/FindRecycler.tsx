@@ -6,7 +6,7 @@ import {
   ChevronLeftIcon, MapPinIcon, PhoneIcon, ShieldCheckIcon, StarIcon, TruckIcon, FilterIcon,
 } from "@/components/icons";
 import { ClayButton, ClayCard, ClayBadge, EmptyState, LoadingState } from "@/components/ui/kit";
-import { useAppState, pushToast } from "@/lib/app-state";
+import { useAppState, pushToast, enqueueDraft } from "@/lib/app-state";
 import { formatINR } from "@/lib/format";
 import { useMaterials, useProfile, useMatchedRecyclers } from "@/hooks/use-kc-data";
 import { cn } from "@/lib/utils";
@@ -52,6 +52,21 @@ export default function FindRecycler({
 
   const select = async (recyclerId: Id<"recyclers">) => {
     if (!profile) return;
+    // Locally onboarded (Pending Sync) profile: queue the lot instead of
+    // calling the backend mutation with an invalid id.
+    if ("isLocalProfile" in profile) {
+      enqueueDraft({
+        materialCode: mat,
+        weight: weightKg && weightKg > 0 ? weightKg : 1,
+        condition: "good",
+        locationLabel: "Sector 8, New Delhi (demo location)",
+        capturedAt: Date.now(),
+        estimatedValue: 0,
+      });
+      pushToast(t("add.offlineNote"), "info");
+      onClose();
+      return;
+    }
     if (onDone) {
       onDone(recyclerId);
       return;

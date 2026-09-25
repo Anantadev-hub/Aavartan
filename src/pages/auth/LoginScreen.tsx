@@ -12,7 +12,9 @@ import {
   formatMasked,
   isValidMobile,
   loadLastAuth,
+  markPendingProfileSynced,
   saveLastAuth,
+  savePendingProfile,
   type OnboardData,
   type Role,
 } from "@/lib/auth-service";
@@ -79,27 +81,47 @@ export default function LoginScreen() {
     setStep({ s: "role" });
   };
 
+  // Offline-first onboarding: ALWAYS save locally and navigate immediately.
+  // The backend is only touched opportunistically in the background; a failure
+  // never blocks navigation and never surfaces a connection error on this
+  // screen. Collection area comes from the local demo list (no network).
   const finish = async (r: Role, data: OnboardData) => {
-    setBusy(true);
-    setNetworkError(null);
-    try {
-      if (online) {
+    const name =
+      data.name.trim() || (r === "collector" ? "Rahul Kumar" : "GreenCycle Recycling");
+
+    // 1) Save onboarding locally (name, phone, language, area, role).
+    savePendingProfile({
+      role: r,
+      name,
+      phone: data.phone ?? mobile,
+      language: data.language,
+      area: data.area,
+      facilityMaterials: data.facilityMaterials,
+      pickupAvailable: data.pickupAvailable,
+    });
+    saveLastAuth({ role: r, name });
+    applyLang((data.language as "en" | "hi" | "mr") ?? "en");
+
+    // 2) Navigate to the app without any network dependency.
+    navigate(r === "collector" ? "/app" : "/recycler", { replace: true });
+
+    // 3) Best-effort background sync when actually reachable.
+    if (navigator.onLine) {
+      void (async () => {
         try {
-          await signOut();
+          try {
+            await signOut();
+          } catch {
+            /* no existing session — fine */
+          }
+          await signIn("anonymous");
+          await createProfile({ role: r, name });
+          markPendingProfileSynced();
         } catch {
-          /* no existing session — fine */
+          // Backend unreachable (e.g. Wi-Fi off but navigator.onLine true):
+          // the profile stays "Pending Sync" locally. Never blocks the user.
         }
-        await signIn("anonymous");
-        const name =
-          data.name.trim() || (r === "collector" ? "Rahul Kumar" : "GreenCycle Recycling");
-        await createProfile({ role: r, name });
-        saveLastAuth({ role: r, name });
-      }
-      applyLang((data.language as "en" | "hi" | "mr") ?? "en");
-      navigate(r === "collector" ? "/app" : "/recycler", { replace: true });
-    } catch {
-      setNetworkError("Unable to connect. Please check your internet connection.");
-      setBusy(false);
+      })();
     }
   };
 
