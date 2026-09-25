@@ -33,8 +33,10 @@ function mockClassify(imageDataUrl: string): ClassResult {
   })();
 
   const classes = ["pcb", "cable", "battery", "lcd", "crt", "motor", "plastic", "other"];
-  const primaryIdx = seed % classes.length;
-  const confidence = 0.55 + rand() * 0.43; // 55–98%
+  // Demo bias: resolve to PCB ~70% of the time so the scripted SIH demo flow
+  // (photograph a PCB → "PCB — 94%") is reproducible on stage.
+  const primaryIdx = rand() < 0.7 ? 0 : 1 + (seed % (classes.length - 1));
+  const confidence = primaryIdx === 0 ? 0.78 + rand() * 0.2 : 0.55 + rand() * 0.3;
   const second = classes[(primaryIdx + 1 + Math.floor(rand() * 6)) % classes.length];
   const candidates = [
     { materialCode: classes[primaryIdx], confidence: Math.round(confidence * 100) },

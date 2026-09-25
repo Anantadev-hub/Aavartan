@@ -59,7 +59,16 @@ function writeJSON(key: string, value: unknown) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    /* storage full/private */
+    // Storage full: retry without photo payloads rather than losing drafts.
+    if (key === QUEUE_KEY && Array.isArray(value)) {
+      try {
+        const slim = (value as Array<Record<string, unknown>>).map(({ photoDataUrl: _drop, ...rest }) => rest);
+        localStorage.setItem(key, JSON.stringify(slim));
+        return;
+      } catch {
+        /* give up silently — newest writes still live in memory */
+      }
+    }
   }
 }
 
@@ -194,11 +203,14 @@ export function useAppState(): AppContextValue {
 
 // ---- Sync worker: flush the queue when we come back online -----------------
 
-export function useSyncWorker(onSync: (drafts: QueuedDraft[]) => Promise<{ synced: number }>) {
+export function useSyncWorker(
+  onSync: (drafts: QueuedDraft[]) => Promise<{ synced: number }>,
+  enabled: boolean,
+) {
   const { online, queue, syncState } = useAppState();
 
   useEffect(() => {
-    if (!online || queue.length === 0 || syncState === "syncing") return;
+    if (!enabled || !online || queue.length === 0 || syncState === "syncing") return;
     let cancelled = false;
     (async () => {
       setSyncState("syncing");
@@ -219,5 +231,5 @@ export function useSyncWorker(onSync: (drafts: QueuedDraft[]) => Promise<{ synce
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [online, queue.length, syncState]);
+  }, [enabled, online, queue.length, syncState]);
 }

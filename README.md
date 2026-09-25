@@ -1,293 +1,167 @@
-## Overview
+# ♻ Kabadiwala Connect
 
-This project uses the following tech stack:
-- Vite
-- Typescript
-- React Router v7 (all imports from `react-router` instead of `react-router-dom`)
-- React 19 (for frontend components)
-- Tailwind v4 (for styling)
-- Shadcn UI (for UI components library)
-- Lucide Icons (for icons)
-- Convex (for backend & database)
-- Convex Auth (for authentication)
-- Framer Motion (for animations)
-- Three js (for 3d models)
+**Bringing informal collectors into the formal recycling chain.**
+*SIH 2026 · Problem Statement SIH26229 · Clean & Green Technology*
 
-All relevant files live in the 'src' directory.
+Kabadiwala Connect is a two-sided e-waste platform: a **mobile-first collector app** for kabadiwalas
+(photo → AI material ID → indicative price → recycler matching → digital lot → verified handover →
+earnings) and an **operations portal** for authorized recyclers (incoming lots → quote → handover →
+payment). One coherent ecosystem with a single transaction record flowing between both sides.
 
-Use bun for the package manager.
+---
 
-## Setup
+## ⚠️ Honest scope statement (read first)
 
-This project is set up already and running on a cloud environment, as well as a convex development in the sandbox.
+This is a **prototype**. Wherever a capability is mocked, the UI and code say so:
 
-## Environment Variables
+| Capability | Prototype implementation | Production path |
+|---|---|---|
+| AI material classification | Mock inference (`src/convex/ai.ts`) — deterministic demo model, labelled "Demo inference" in the UI | Swap the action body for a `fetch()` to a FastAPI model service (`AI_SERVICE_URL`) |
+| Location / distance | Static demo coordinates + demo distances (Delhi NCR) | Real GPS + geocoding + distance matrix |
+| Authorization status | Clearly labelled "authorized (demo)" — **no real government IDs anywhere** | CPCB EPR registry integration |
+| Handover integrity | Demo checksum (FNV-style hash), labelled "tamper-evident concept" | Server-side signatures / append-only ledger |
+| Payments | Simulated cash/UPI marking only — no money moves | UPI collect / PG webhooks |
+| Authentication | Convex anonymous sessions + role profile (mock sign-in) | Phone + OTP (structure already separated from role selection) |
+| Offline sync | localStorage queue + idempotent `/sync`-style Convex mutation | IndexedDB (localForage) + background sync worker |
+| Photos | Client-side compressed JPEG stored inline | Object storage (Supabase Storage / S3) |
 
-The project is set up with project specific CONVEX_DEPLOYMENT and VITE_CONVEX_URL environment variables on the client side.
+No fake claims: the UI never says "real AI", "real GPS", "real OTP", "verified by CPCB" or "payment
+processed by a bank".
 
-The convex server has a separate set of environment variables that are accessible by the convex backend.
+---
 
-Currently, these variables include auth-specific keys: JWKS, JWT_PRIVATE_KEY, and SITE_URL.
+## Tech stack (as built)
 
+- **Frontend:** React 19 + Vite + TypeScript + Tailwind CSS 4 (Claymorphism theme) + framer-motion
+- **Backend:** **Convex** (typed serverless functions + reactive database) — plays the role the brief
+  assigned to FastAPI + PostgreSQL/Supabase. Every brief API concept maps 1:1 to a Convex function
+  (mapping table below). All platform endpoints are authenticated and role-aware.
+- **Maps/geo:** demo distance data with a transparent scoring match (no map API key needed); the UI
+  never pretends to render live GPS
+- **QR:** `qrcode.react` for the digital handover record
+- **Voice:** browser SpeechSynthesis (no external service)
+- **Charts:** hand-rolled SVG (zero-dependency trends)
 
-# Using Authentication (Important!)
+---
 
-You must follow these conventions when using authentication.
+## Run it
 
-## Auth is already set up.
-
-All convex authentication functions are already set up. The auth currently uses email OTP and anonymous users, but can support more.
-
-The email OTP configuration is defined in `src/convex/auth/emailOtp.ts`. DO NOT MODIFY THIS FILE.
-
-Also, DO NOT MODIFY THESE AUTH FILES: `src/convex/auth.config.ts` and `src/convex/auth.ts`.
-
-## Using Convex Auth on the backend
-
-On the `src/convex/users.ts` file, you can use the `getCurrentUser` function to get the current user's data.
-
-## Using Convex Auth on the frontend
-
-The `/auth` page is already set up to use auth. Navigate to `/auth` for all log in / sign up sequences.
-
-You MUST use this hook to get user data. Never do this yourself without the hook:
-```typescript
-import { useAuth } from "@/hooks/use-auth";
-
-const { isLoading, isAuthenticated, user, signIn, signOut } = useAuth();
+```bash
+bun install
+bun convex dev --once   # generate Convex types + push functions
+bun run dev             # vite dev server
 ```
 
-## Protected Routes
+Reference data (materials, 90-day price history, 4 Delhi-NCR recyclers, safety guides) seeds itself
+on first app load via `seed.seedIfEmpty` (idempotent). Demo recovery: call `seed.reseedDemoData`.
 
-The starter `/dashboard` route is protected with `RequireAuth`. Extend that page
-for the product's authenticated experience, and reuse `RequireAuth` when adding
-another protected route — do NOT hand-roll a redirect to `/auth`, since landing
-on a bare sign-in form with no explanation of what was blocked is confusing.
+Environment: only `VITE_CONVEX_URL` (already wired in the Freebuff template) and optionally
+`AI_SERVICE_URL` (server-side, for the future real model — read via `process.env` inside the action).
 
-`RequireAuth` states the block on the page the visitor asked for and sends them
-to `/auth?returnTo=<current route>` when they choose to sign in, so they come
-back to it. Pass `title` and `description` to say what the page is:
+---
 
-```tsx
-<Route
-  path="/dashboard"
-  element={
-    <RequireAuth
-      title="Sign in to view your dashboard"
-      description="Your projects and settings live here."
-    >
-      <Dashboard />
-    </RequireAuth>
-  }
-/>
-```
+## The demo flow (under 3 minutes)
 
-Pass `redirectImmediately` for a route where bouncing straight to `/auth` really
-is better.
+1. **Open the app** → landing page → language switcher (EN/हिंदी/मराठी) visible
+2. **"Start selling — Collector app"** → role screen → *KABADIWALA* → Continue (mock sign-in)
+3. Collector home: greeting, stats, **Add E-Waste** CTA
+4. **Add E-Waste** → take/upload a photo → *"Analyzing image…"* → **AI: PCB — 94%** (demo inference)
+5. Confirm material → enter **8.5 kg** → condition **Good** → rate **₹410/kg** → **estimated ₹3,485**
+6. **Find Authorized Recycler** → ranked list with transparent match score → **GreenCycle (2.4 km, 4.8★)** → Select
+7. Lot created → **KC-2026-0001** → tracking timeline (`CREATED → SENT → …`)
+8. Sign out / back → **Enter as Recycler** → portal shows the lot in **Available Lots**
+9. **Review** → quote **₹410/kg** → **Accept & Send Quote**
+10. **Transactions → Active → Confirm Handover**
+11. Collector app → lot → **"I have handed over the material"** → **Verified Digital Handover** record with QR + checksum
+12. Recycler → **Mark Payment Completed** (Cash / UPI)
+13. Collector → **Earnings** → total updated, transaction in ledger
 
-## Auth Page
+Offline demo: toggle airplane mode, capture a lot (weight + photo + material) → "Saved offline — will
+sync when you're connected" → back online → "records synced successfully", lot appears.
 
-The auth page is defined in `src/pages/Auth.tsx`. Send sign-in and sign-up actions
-to `/auth`.
+---
 
-## Authorization
-
-You can perform authorization checks on the frontend and backend.
-
-On the frontend, you can use the `useAuth` hook to get the current user's data and authentication state.
-
-You should also be protecting queries, mutations, and actions at the base level, checking for authorization securely.
-
-## Adding a redirect after auth
-
-The `/auth` route in `src/main.tsx` redirects to `/dashboard` by default. If the
-product's main authenticated route is different, update `redirectAfterAuth` to
-that route. A validated same-origin `returnTo` query parameter takes priority so
-users can resume the protected page they originally requested. Never leave an
-authenticated product redirecting back to the public landing page.
-
-## Complete authenticated products
-
-When the requested product implies accounts, a workspace, a dashboard, or other
-signed-in functionality, the task is not complete with only a landing page and
-auth form. Build the main authenticated experience, protect its route, and verify
-that signing in reaches it.
-
-# Frontend Conventions
-
-You will be using the Vite frontend with React 19, Tailwind v4, and Shadcn UI.
-
-Generally, pages should be in the `src/pages` folder, and components should be in the `src/components` folder.
-
-Shadcn primitives are located in the `src/components/ui` folder and should be used by default.
-
-## Page routing
-
-Your page component should go under the `src/pages` folder.
-
-When adding a page, update the react router configuration in `src/main.tsx` to include the new route you just added.
-
-## Shad CN conventions
-
-Follow these conventions when using Shad CN components, which you should use by default.
-- Remember to use "cursor-pointer" to make the element clickable
-- For title text, use the "tracking-tight font-bold" class to make the text more readable
-- Always make apps MOBILE RESPONSIVE. This is important
-- AVOID NESTED CARDS. Try and not to nest cards, borders, components, etc. Nested cards add clutter and make the app look messy.
-- AVOID SHADOWS. Avoid adding any shadows to components. stick with a thin border without the shadow.
-- Avoid skeletons; instead, use the loader2 component to show a spinning loading state when loading data.
-
-
-## Landing Pages
-
-You must always create good-looking designer-level styles to your application. 
-- Make it well animated and fit a certain "theme", ie neo brutalist, retro, neumorphism, glass morphism, etc
-
-Use known images and emojis from online.
-
-If the user is logged in already, show the get started button to say "Dashboard" or "Profile" instead to take them there.
-
-## Responsiveness and formatting
-
-Make sure pages are wrapped in a container to prevent the width stretching out on wide screens. Always make sure they are centered aligned and not off-center.
-
-Always make sure that your designs are mobile responsive. Verify the formatting to ensure it has correct max and min widths as well as mobile responsiveness.
-
-- Always create sidebars for protected dashboard pages and navigate between pages
-- Always create navbars for landing pages
-- On these bars, the created logo should be clickable and redirect to the index page
-
-## Animating with Framer Motion
-
-You must add animations to components using Framer Motion. It is already installed and configured in the project.
-
-To use it, import the `motion` component from `framer-motion` and use it to wrap the component you want to animate.
-
-
-### Other Items to animate
-- Fade in and Fade Out
-- Slide in and Slide Out animations
-- Rendering animations
-- Button clicks and UI elements
-
-Animate for all components, including on landing page and app pages.
-
-## Three JS Graphics
-
-Your app comes with three js by default. You can use it to create 3D graphics for landing pages, games, etc.
-
-
-## Colors
-
-You can override colors in: `src/index.css`
-
-This uses the oklch color format for tailwind v4.
-
-Always use these color variable names.
-
-Make sure all ui components are set up to be mobile responsive and compatible with both light and dark mode.
-
-Set theme using `dark` or `light` variables at the parent className.
-
-## Styling and Theming
-
-When changing the theme, always change the underlying theme of the shad cn components app-wide under `src/components/ui` and the colors in the index.css file.
-
-Avoid hardcoding in colors unless necessary for a use case, and properly implement themes through the underlying shad cn ui components.
-
-When styling, ensure buttons and clickable items have pointer-click on them (don't by default).
-
-Always follow a set theme style and ensure it is tuned to the user's liking.
-
-## Toasts
-
-You should always use toasts to display results to the user, such as confirmations, results, errors, etc.
-
-Use the shad cn Sonner component as the toaster. For example:
+## Architecture
 
 ```
-import { toast } from "sonner"
-
-import { Button } from "@/components/ui/button"
-export function SonnerDemo() {
-  return (
-    <Button
-      variant="outline"
-      onClick={() =>
-        toast("Event has been created", {
-          description: "Sunday, December 03, 2023 at 9:00 AM",
-          action: {
-            label: "Undo",
-            onClick: () => console.log("Undo"),
-          },
-        })
-      }
-    >
-      Show Toast
-    </Button>
-  )
-}
+src/
+├── convex/                # Backend (the "FastAPI layer")
+│   ├── schema.ts          # Tables: profiles, materials, priceHistory, recyclers,
+│   │                      #   lots, anomalyFlags, safetyGuides (+ authTables)
+│   ├── seed.ts            # Idempotent demo seed (materials/history/recyclers/safety)
+│   ├── materials.ts       # GET /materials, /prices, /prices/trends, /safety-guides
+│   ├── recyclers.ts       # GET /recyclers, POST /recyclers/match (transparent scoring)
+│   ├── lots.ts            # POST /lots, lifecycle, handover, payment, timeline,
+│   │                      #   earnings summary/monthly, recycler stats, anomaly rules
+│   ├── ai.ts              # POST /ai/classify-material (mock model — single swap point)
+│   ├── sync.ts            # POST /sync (idempotent offline draft ingestion)
+│   └── profiles.ts        # GET /auth/me, role selection, demo profile
+├── pages/
+│   ├── Landing.tsx        # Brand landing → auth entry
+│   ├── Auth.tsx           # Role onboarding (mock sign-in)
+│   ├── collector/         # CollectorApp (phone shell), Home, Prices, AddFlow,
+│   │                      #   FindRecycler, Lots, LotDetail (timeline + handover QR),
+│   │                      #   Earnings, SafetyGuide
+│   └── recycler/          # RecyclerApp (portal shell), Dashboard, Available Lots,
+│                          #   Review/quote/reject, Transactions, Facility
+├── components/            # icons.tsx (SVG set), shell.tsx, ui/kit.tsx, ui/timeline.tsx
+├── hooks/use-kc-data.ts   # Data hooks incl. offline price cache
+└── lib/
+    ├── app-state.ts       # Language, online status, offline queue, toasts, speech, sync worker
+    ├── i18n.ts            # EN/HI/MR dictionary + spoken price sentences
+    └── format.ts          # ₹/kg/date formatting, image compression
 ```
 
-Remember to import { toast } from "sonner". Usage: `toast("Event has been created.")`
+### API mapping (brief → implementation)
 
-## Dialogs
+| Brief endpoint | Convex function |
+|---|---|
+| `POST /auth/*` | Convex Auth (`signIn`/`signOut`) + `profiles.createProfile` |
+| `GET /auth/me` | `profiles.myProfile` |
+| `GET /materials`, `GET /materials/{id}` | `materials.listMaterials` |
+| `GET /prices`, `GET /prices/trends` | `materials.priceTrends` + material rates |
+| `POST /lots`, `GET /lots`, `GET /lots/{id}` | `lots.createLot`, `lots.listLots`, `lots.getLot` |
+| `POST /ai/classify-material` | `ai.classifyMaterial` (action) |
+| `POST /ai/estimate-value` | `lots.estimateValue` (rate × condition multiplier) |
+| `POST /recyclers/match`, `GET /recyclers` | `recyclers.matchRecyclers`, `recyclers.listRecyclers` |
+| `PATCH /transactions/{id}/status` | `lots.quoteLot` / `lots.sendLot` |
+| `POST /transactions/{id}/handover` | `lots.confirmHandover` (two-sided) |
+| `POST /transactions/{id}/payment` | `lots.markPaymentCompleted` |
+| `GET /earnings/summary`, `/monthly` | `lots.earningsSummary`, `lots.monthlyEarnings` |
+| `POST /sync` | `sync.syncQueue` (idempotent per `clientRef`) |
+| `GET /safety-guides` | `materials.listSafetyGuides` |
 
-Always ensure your larger dialogs have a scroll in its content to ensure that its content fits the screen size. Make sure that the content is not cut off from the screen.
+### Transaction dataset fields (as specified in the brief)
 
-Ideally, instead of using a new page, use a Dialog instead. 
+`referenceId` · `materialCode` · `photoDataUrl` · `weight` · `estimatedValue` · `quotedPrice` ·
+`finalSaleValue` · `createdAt` · `locationLabel` · `collectorId` · `recyclerId` · `status` ·
+`paymentMethod` · `handoverAt` (+ handover ref/checksum, sync origin, AI attribution).
 
-# Using the Convex backend
+### The four AI/ML capabilities
 
-You will be implementing the convex backend. Follow your knowledge of convex and the documentation to implement the backend.
+- **A. Material classification** — `ai.classifyMaterial` action returns `{materialCode, confidence,
+  candidates, model}`; mock today, one function to replace tomorrow.
+- **B. Valuation** — explainable: `rate(material) × condition multiplier × weight`.
+- **C. Recycler matching** — **transparent scoring function** (material 40 · verification 20 ·
+  distance ≤15 · pickup 10 · rate ≤10 · rating ≤5). Explicitly *not* labelled "AI matching".
+- **D. Anomaly detection** — rules engine in `lots.ts` (invalid/unusual weight, quote ≫ market rate,
+  damaged-condition overpricing, final ≫ estimate). Writes `anomalyFlags`, renders "Review
+  recommended" — never blocks, never accuses.
 
-## The Convex Schema
+---
 
-You must correctly follow the convex schema implementation.
+## Product principles in the build
 
-The schema is defined in `src/convex/schema.ts`.
+Trust (verified badges, traceable IDs) · Transparency (live rates, trends, quote vs estimate) ·
+Accessibility (EN/HI/MR, voice prices, large touch targets, aria labels, focus states) ·
+Traceability (KC-2026-XXXX IDs, two-sided handover record + QR) · Inclusion (camera-first, minimal
+typing) · Offline-first (queue + honest status chips) · Fairness (estimate vs quote always shown) ·
+Safety (per-material guides with TTS) · Data (every lot produces the full structured record) ·
+Scalability (single-swap AI seam, reactive backend).
 
-Do not include the `_id` and `_creationTime` fields in your queries (it is included by default for each table).
-Do not index `_creationTime` as it is indexed for you. Never have duplicate indexes.
+## Demo data
 
-
-## Convex Actions: Using CRUD operations
-
-When running anything that involves external connections, you must use a convex action with "use node" at the top of the file.
-
-You cannot have queries or mutations in the same file as a "use node" action file. Thus, you must use pre-built queries and mutations in other files.
-
-You can also use the pre-installed internal crud functions for the database:
-
-```ts
-// in convex/users.ts
-import { crud } from "convex-helpers/server/crud";
-import schema from "./schema.ts";
-
-export const { create, read, update, destroy } = crud(schema, "users");
-
-// in some file, in an action:
-const user = await ctx.runQuery(internal.users.read, { id: userId });
-
-await ctx.runMutation(internal.users.update, {
-  id: userId,
-  patch: {
-    status: "inactive",
-  },
-});
-```
-
-
-## Common Convex Mistakes To Avoid
-
-When using convex, make sure:
-- Document IDs are referenced as `_id` field, not `id`.
-- Document ID types are referenced as `Id<"TableName">`, not `string`.
-- Document object types are referenced as `Doc<"TableName">`.
-- Keep schemaValidation to false in the schema file.
-- You must correctly type your code so that it passes the type checker.
-- You must handle null / undefined cases of your convex queries for both frontend and backend, or else it will throw an error that your data could be null or undefined.
-- Always use the `@/folder` path, with `@/convex/folder/file.ts` syntax for importing convex files.
-- This includes importing generated files like `@/convex/_generated/server`, `@/convex/_generated/api`
-- Remember to import functions like useQuery, useMutation, useAction, etc. from `convex/react`
-- NEVER have return type validators.
+Materials: PCB ₹410/kg, LCD ₹95, CRT ₹42, Copper Cable ₹320, Lead Battery ₹138, Motors ₹105, Mixed
+Plastic ₹38 — each with 90 days of generated history. Recyclers: GreenCycle Recycling (Okhla),
+Delhi E-Waste Solutions (Anand Parbat), NCR Metal Reclaimers (Kirti Nagar), Yamuna Green Recyclers
+(Transport Nagar) — all clearly marked demo.

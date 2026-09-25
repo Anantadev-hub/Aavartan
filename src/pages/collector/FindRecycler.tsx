@@ -17,11 +17,13 @@ export default function FindRecycler({
   materialCode,
   weightKg,
   onDone,
+  onCreated,
   onClose,
 }: {
   materialCode?: string;
   weightKg?: number;
   onDone?: (recyclerId: Id<"recyclers">) => void;
+  onCreated?: (lotId: Id<"lots">) => void;
   onClose: () => void;
 }) {
   const { t } = useAppState();
@@ -44,6 +46,8 @@ export default function FindRecycler({
   });
 
   const createLot = useMutation(api.lots.createLot);
+  // Browse mode (no weight known): show recyclers without creating lots.
+  const browse = !weightKg || weightKg <= 0;
 
   const select = async (recyclerId: Id<"recyclers">) => {
     if (!profile) return;
@@ -68,7 +72,8 @@ export default function FindRecycler({
         sendNow: true,
       });
       pushToast(`Lot ${res.referenceId} sent to recycler`, "success");
-      onClose();
+      if (onCreated) onCreated(res.lotId);
+      else onClose();
     } catch (err) {
       pushToast(err instanceof Error ? err.message : "Could not create lot", "error");
     } finally {
@@ -207,21 +212,28 @@ export default function FindRecycler({
                 <ClayBadge tone={r.verified ? "green" : "amber"}>
                   {r.authorizationStatus}
                 </ClayBadge>
-                <ClayButton
-                  size="sm"
-                  disabled={!r.acceptsMaterial || selecting !== null}
-                  onClick={() => void select(r._id)}
-                >
-                  {selecting === r._id ? "Sending…" : t("common.selectRecycler")}
-                </ClayButton>
+                {browse ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-xl bg-muted px-3 py-2 text-[12px] font-bold text-muted2">
+                    <PhoneIcon className="size-4" /> {r.contact}
+                  </span>
+                ) : (
+                  <ClayButton
+                    size="sm"
+                    disabled={!r.acceptsMaterial || selecting !== null}
+                    onClick={() => void select(r._id)}
+                  >
+                    {selecting === r._id ? "Sending…" : t("common.selectRecycler")}
+                  </ClayButton>
+                )}
               </div>
             </ClayCard>
           ))
         )}
 
         <p className="pt-1 text-center text-[11px] text-muted2">
-          Matching uses a transparent score: material fit, distance, verification, pickup and rate. No
-          black-box AI.
+          {browse
+            ? "Browse mode — start from Add E-Waste with a weight to send a lot."
+            : "Matching uses a transparent score: material fit, distance, verification, pickup and rate. No black-box AI."}
         </p>
       </div>
     </div>

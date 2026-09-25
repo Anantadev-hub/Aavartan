@@ -17,6 +17,14 @@ import RecyclerTransactions from "./RecyclerTransactions";
 
 type Tab = "home" | "lots" | "deals" | "facility";
 
+function Redirect({ to }: { to: string }) {
+  const navigate = useNavigate();
+  useEffect(() => {
+    navigate(to, { replace: true });
+  }, [navigate, to]);
+  return null;
+}
+
 export default function RecyclerApp() {
   const { t } = useAppState();
   const navigate = useNavigate();
@@ -49,12 +57,10 @@ export default function RecyclerApp() {
     );
   }
   if (profile === null) {
-    navigate("/auth?role=recycler", { replace: true });
-    return null;
+    return <Redirect to="/auth?role=recycler" />;
   }
   if (profile.role !== "recycler" || !profile.recyclerId) {
-    navigate("/app", { replace: true });
-    return null;
+    return <Redirect to="/app" />;
   }
 
   return (
@@ -70,15 +76,13 @@ export default function RecyclerApp() {
               Kabadiwala Connect — Recycler Portal
             </p>
             <p className="flex items-center gap-1 text-[11px] font-semibold text-muted2">
-              GreenCycle Recycling (demo account)
+              {profile.name} (demo account)
               <ShieldCheckIcon className="size-3.5 text-[var(--verified)]" />
             </p>
           </div>
           <SyncIndicator />
           <button
-            onClick={async () => {
-              navigate("/", { replace: true });
-            }}
+            onClick={() => navigate("/", { replace: true })}
             aria-label="Exit portal"
             className="clay-sm flex size-10 items-center justify-center text-muted2 clay-pressable"
           >

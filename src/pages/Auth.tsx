@@ -25,6 +25,7 @@ function AuthInner() {
   const [busy, setBusy] = useState(false);
 
   const signIn = useAuthActions().signIn;
+  const signOut = useAuthActions().signOut;
   const createProfile = useMutation(api.profiles.createProfile);
 
 
@@ -32,7 +33,9 @@ function AuthInner() {
     setBusy(true);
     try {
       // Mock authentication: anonymous Convex auth session. Structure supports
-      // phone/OTP later — clearly labelled demo.
+      // phone/OTP later — clearly labelled demo. Any existing demo session is
+      // cleared first so role switching always creates the right profile.
+      await signOut();
       await signIn("anonymous");
       await createProfile({ role: r, name: name.trim() || (r === "collector" ? "Rahul Kumar" : "GreenCycle Recycling") });
       navigate(r === "collector" ? "/app" : "/recycler", { replace: true });

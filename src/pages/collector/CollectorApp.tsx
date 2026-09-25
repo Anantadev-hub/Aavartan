@@ -16,7 +16,10 @@ import SafetyGuide from "./SafetyGuide";
 import FindRecycler from "./FindRecycler";
 import LotDetail from "./LotDetail";
 
-type Overlay = null | { kind: "safety" } | { kind: "recyclers"; materialCode?: string };
+type Overlay =
+  | null
+  | { kind: "safety" }
+  | { kind: "recyclers"; materialCode?: string; weightKg?: number };
 
 function Redirect({ to }: { to: string }) {
   const navigate = useNavigate();
@@ -54,11 +57,14 @@ export default function CollectorApp() {
 
   // Flush the offline queue whenever we are online and items are waiting.
   const syncQueue = useMutation(api.sync.syncQueue);
-  useSyncWorker(async (drafts) => {
-    if (!profile) return { synced: 0 };
-    const res = await syncQueue({ collectorId: profile._id, drafts });
-    return { synced: res.synced };
-  });
+  useSyncWorker(
+    async (drafts) => {
+      if (!profile) throw new Error("Profile not ready");
+      const res = await syncQueue({ collectorId: profile._id, drafts });
+      return { synced: res.synced };
+    },
+    profile !== null, // only when the profile is actually loaded
+  );
 
   if (profile === undefined) {
     return (
@@ -96,7 +102,13 @@ export default function CollectorApp() {
       <PhoneFrame>
         <FindRecycler
           materialCode={overlay.materialCode}
+          weightKg={overlay.weightKg}
           onClose={() => setOverlay(null)}
+          onCreated={(lotId) => {
+            setOverlay(null);
+            setTab("lots");
+            setOpenLotId(lotId);
+          }}
         />
         <Toasts />
       </PhoneFrame>
@@ -123,6 +135,9 @@ export default function CollectorApp() {
               setOpenLotId(lotId);
             }}
             onCancel={() => setTab("home")}
+            onFindRecycler={(materialCode, weightKg) =>
+              setOverlay({ kind: "recyclers", materialCode, weightKg })
+            }
           />
         )}
         {tab === "lots" && <CollectorLots onOpenLot={(id) => setOpenLotId(id as Id<"lots">)} />}

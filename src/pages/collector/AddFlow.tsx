@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
@@ -22,15 +22,18 @@ const CONDITIONS = [
 export default function AddFlow({
   onDone,
   onCancel,
+  onFindRecycler,
 }: {
   onDone: (lotId: Id<"lots">) => void;
   onCancel: () => void;
+  onFindRecycler: (materialCode: string, weightKg: number) => void;
 }) {
   const { t, online } = useAppState();
   const profile = useProfile();
   const { materials } = useMaterials();
 
   const createLotFn = useMutation(api.lots.createLot);
+  const classifyAction = useAction(api.ai.classifyMaterial);
 
   const [step, setStep] = useState<Step>("capture");
   const [photo, setPhoto] = useState<string | null>(null);
@@ -56,21 +59,14 @@ export default function AddFlow({
       const dataUrl = await fileToCompressedDataUrl(file);
       setPhoto(dataUrl);
       setStep("analyzing");
-      // Demo inference: deterministic hash of the image bytes. Replace with a
-      // FastAPI model endpoint in production — see src/convex/ai.ts.
-      let h = dataUrl.length >>> 0;
-      const stride = Math.max(1, Math.floor(dataUrl.length / 48));
-      for (let i = 0; i < dataUrl.length; i += stride) {
-        h = (h * 31 + dataUrl.charCodeAt(i)) >>> 0;
-      }
-      const classes = ["pcb", "cable", "battery", "lcd", "crt", "motor", "plastic", "other"];
-      const primary = classes[h % classes.length];
-      const confidence = 0.55 + ((h >>> 8) % 44) / 100;
-      await new Promise((r) => setTimeout(r, 2100));
-      setAi({ materialCode: primary, confidence });
-      setMaterial(primary);
+      // Demo inference via the Convex action seam (src/convex/ai.ts). Swap the
+      // mock model inside that action for a FastAPI endpoint in production.
+      const result = await classifyAction({ imageDataUrl: dataUrl });
+      await new Promise((r) => setTimeout(r, 1400)); // visible "analyzing" state
+      setAi({ materialCode: result.materialCode, confidence: result.confidence });
+      setMaterial(result.materialCode);
       setStep("result");
-      if (confidence < 0.7) pushToast(t("add.lowConfidence"), "info");
+      if (result.confidence < 0.7) pushToast(t("add.lowConfidence"), "info");
     } catch {
       pushToast("AI identification failed. Please select the material manually.", "error");
       setStep("details");
@@ -373,7 +369,7 @@ export default function AddFlow({
             <ClayButton
               className="w-full"
               disabled={submitting || weight <= 0 || !online}
-              onClick={() => void createLot(true)}
+              onClick={() => onFindRecycler(material, weight)}
             >
               <TruckIcon className="size-5" />
               Find Authorized Recycler

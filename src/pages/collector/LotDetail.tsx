@@ -21,6 +21,7 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
   const { materials } = useMaterials();
 
   const confirmHandover = useMutation(api.lots.confirmHandover);
+  const sendLot = useMutation(api.lots.sendLot);
   const [confirming, setConfirming] = useState(false);
 
   if (data === undefined || timeline === undefined) {
@@ -99,6 +100,33 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
           </div>
         </div>
       </ClayCard>
+
+      {/* Send to recycler (created lots) */}
+      {lot.status === "created" && isCollectorSide && (
+        <ClayCard className="rounded-3xl">
+          <p className="text-[15px] font-extrabold text-navy">Ready to sell</p>
+          <p className="mt-1 text-[13px] text-muted2">
+            This lot is saved but no recycler has it yet. Send it to receive quotes.
+          </p>
+          <ClayButton
+            className="mt-3 w-full"
+            disabled={confirming || !online}
+            onClick={async () => {
+              setConfirming(true);
+              try {
+                await sendLot({ lotId: lot._id });
+                pushToast("Lot sent to recyclers", "success");
+              } catch (err) {
+                pushToast(err instanceof Error ? err.message : "Could not send", "error");
+              } finally {
+                setConfirming(false);
+              }
+            }}
+          >
+            Send to recycler
+          </ClayButton>
+        </ClayCard>
+      )}
 
       {/* Quote / value */}
       <ClayCard className="rounded-3xl">
