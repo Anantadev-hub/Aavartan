@@ -99,6 +99,10 @@ export default function LoginScreen() {
       facilityMaterials: data.facilityMaterials,
       pickupAvailable: data.pickupAvailable,
     });
+    // Language chosen at onboarding becomes the app language immediately (§37).
+    if (data.language === "hi" || data.language === "mr") {
+      applyLang(data.language);
+    }
     saveLastAuth({ role: r, name });
     applyLang((data.language as "en" | "hi" | "mr") ?? "en");
 
@@ -115,7 +119,14 @@ export default function LoginScreen() {
             /* no existing session — fine */
           }
           await signIn("anonymous");
-          await createProfile({ role: r, name });
+          // Spec §15/§16 onboarding fields persist to the backend profile.
+          await createProfile({
+            role: r,
+            name,
+            phone: data.phone ?? mobile,
+            preferredLanguage: (data.language as "en" | "hi" | "mr" | undefined) ?? undefined,
+            collectionArea: data.area,
+          });
           markPendingProfileSynced();
         } catch {
           // Backend unreachable (e.g. Wi-Fi off but navigator.onLine true):

@@ -9,8 +9,8 @@ import {
 import { ClayButton, ClayCard, ClayBadge, StatusPill, LoadingState } from "@/components/ui/kit";
 import { Timeline } from "@/components/ui/timeline";
 import { useAppState, pushToast } from "@/lib/app-state";
-import { formatINR, formatKg, formatDateTime } from "@/lib/format";
-import { useMaterials, useProfile, useLotDetail, useLotTimeline } from "@/hooks/use-kc-data";
+import { formatINR, formatKg, formatDateTime, aiConfidencePercent } from "@/lib/format";
+import { useMaterials, useProfile, useLotDetail, useLotTimeline, useFairPriceMeter } from "@/hooks/use-kc-data";
 import { cn } from "@/lib/utils";
 
 export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | string; onBack: () => void }) {
@@ -39,6 +39,13 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
   const { lot, recycler, collector, anomalyFlags } = data;
   const mat = materials?.find((m) => m.code === lot.materialCode);
   const matName = mat?.name ?? lot.materialCode.toUpperCase();
+  const aiPct = aiConfidencePercent(lot.aiConfidence);
+
+  // Fair Price Meter (§24): collector-side transparency when a quote arrives.
+  const meter = useFairPriceMeter(
+    lot.materialCode,
+    lot.quotedPrice && lot.quotedPrice > 0 ? lot.quotedPrice : undefined,
+  );
 
   const isCollectorSide = profile?.role === "collector";
   const canConfirmHandover =
@@ -88,9 +95,10 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
               {formatKg(lot.weight)} · {formatDateTime(lot.createdAt)}
             </p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {lot.aiConfidence ? (
+              {aiPct != null ? (
                 <ClayBadge tone="teal">
-                  <SparkleIcon className="size-3" /> AI {lot.aiConfidence}%
+                  <SparkleIcon className="size-3" /> AI {aiPct}%
+                  {lot.aiSource === "demo" ? " · demo" : ""}
                 </ClayBadge>
               ) : (
                 <ClayBadge>Manual entry</ClayBadge>
@@ -154,6 +162,50 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
             Rejected: {lot.rejectionReason}
           </p>
         )}
+        {meter && lot.quotedPrice ? (
+          <div className="mt-3 rounded-2xl bg-muted px-3.5 py-3">
+            <div className="flex items-center justify-between text-[12px] font-bold">
+              <span className="text-muted2">Fair Price Meter</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5",
+                  meter.wording === "Within typical range"
+                    ? "bg-[#064E3B] text-teal"
+                    : "bg-[#451A03] text-[var(--pending)]",
+                )}
+              >
+                {meter.wording}
+              </span>
+            </div>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#20242D]">
+              <div
+                className={cn(
+                  "h-full rounded-full",
+                  meter.wording === "Within typical range" ? "bg-teal" : "bg-[var(--gold)]",
+                )}
+                style={{
+                  width: `${Math.max(
+                    4,
+                    Math.min(
+                      100,
+                      ((meter.quotedPrice - meter.range.low) /
+                        Math.max(1, meter.range.high - meter.range.low)) *
+                        100,
+                    ),
+                  )}%`,
+                }}
+              />
+            </div>
+            <div className="mt-1.5 flex justify-between text-[10.5px] font-semibold text-muted2">
+              <span>₹{meter.range.low}/kg low</span>
+              <span>
+                Market ₹{meter.currentMarket}/kg · quote {meter.pctVsMarket >= 0 ? "+" : ""}
+                {meter.pctVsMarket}%
+              </span>
+              <span>₹{meter.range.high}/kg high</span>
+            </div>
+          </div>
+        ) : null}
       </ClayCard>
 
       {/* Timeline */}

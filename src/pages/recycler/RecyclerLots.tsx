@@ -7,8 +7,9 @@ import {
 } from "@/components/icons";
 import { ClayButton, ClayCard, ClayBadge, Field, ClayInput, EmptyState, LoadingState } from "@/components/ui/kit";
 import { useAppState, pushToast } from "@/lib/app-state";
-import { formatINR, formatKg, formatDateTime, timeAgo } from "@/lib/format";
-import { useMaterials, useProfile, useAvailableLots, useLotDetail } from "@/hooks/use-kc-data";
+import { formatINR, formatKg, formatDateTime, timeAgo, aiConfidencePercent } from "@/lib/format";
+import { useMaterials, useProfile, useAvailableLots, useLotDetail, useFairPriceMeter } from "@/hooks/use-kc-data";
+import { cn } from "@/lib/utils";
 
 export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers"> }) {
   const { t } = useAppState();
@@ -67,13 +68,17 @@ export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers
                       {lot.referenceId} · {timeAgo(lot.createdAt)}
                     </p>
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {lot.aiConfidence ? (
-                        <ClayBadge tone="teal">
-                          <SparkleIcon className="size-3" /> AI {lot.aiConfidence}%
-                        </ClayBadge>
-                      ) : (
-                        <ClayBadge>Manual</ClayBadge>
-                      )}
+                      {(() => {
+                        const pct = aiConfidencePercent(lot.aiConfidence);
+                        return pct != null ? (
+                          <ClayBadge tone="teal">
+                            <SparkleIcon className="size-3" /> AI {pct}%
+                            {lot.aiSource === "demo" ? " · demo" : ""}
+                          </ClayBadge>
+                        ) : (
+                          <ClayBadge>Manual</ClayBadge>
+                        );
+                      })()}
                       <ClayBadge tone="neutral">{lot.condition}</ClayBadge>
                     </div>
                   </div>
@@ -142,6 +147,13 @@ function ReviewLot({
   const numPrice = Number(price) || 0;
   const finalValue = numPrice > 0 ? Math.round(numPrice * lot.weight) : 0;
 
+  // Fair Price Meter (§24): live comparison of the typed quote against the
+  // recent historical range. Neutral wording — never an accusation.
+  const meter = useFairPriceMeter(
+    lot.materialCode,
+    numPrice > 0 ? numPrice : undefined,
+  );
+
   const submit = async (reject: boolean) => {
     setBusy(true);
     try {
@@ -188,11 +200,16 @@ function ReviewLot({
           <div className="min-w-0 flex-1 space-y-0.5">
             <p className="text-lg font-extrabold text-navy">{matName}</p>
             <p className="text-[13px] text-muted2">{formatKg(lot.weight)} · {lot.condition}</p>
-            {lot.aiConfidence ? (
-              <ClayBadge tone="teal" className="mt-1">
-                <SparkleIcon className="size-3" /> AI estimate {lot.aiConfidence}% confidence
-              </ClayBadge>
-            ) : (
+            {lot.aiConfidence ? (() => {
+              const pct = aiConfidencePercent(lot.aiConfidence);
+              return pct != null ? (
+                <ClayBadge tone="teal" className="mt-1">
+                  <SparkleIcon className="size-3" /> AI estimate {pct}% confidence
+                </ClayBadge>
+              ) : (
+                <ClayBadge className="mt-1">Manual entry</ClayBadge>
+              );
+            })() : (
               <ClayBadge className="mt-1">Manual entry</ClayBadge>
             )}
             <p className="text-[12.5px] text-muted2">
@@ -239,6 +256,50 @@ function ReviewLot({
               </p>
             </div>
           </div>
+          {meter && (
+            <div className="mt-3 rounded-2xl bg-muted px-3.5 py-3">
+              <div className="flex items-center justify-between text-[12px] font-bold">
+                <span className="text-muted2">Fair Price Meter</span>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5",
+                    meter.wording === "Within typical range"
+                      ? "bg-[#064E3B] text-teal"
+                      : "bg-[#451A03] text-[var(--pending)]",
+                  )}
+                >
+                  {meter.wording}
+                </span>
+              </div>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#20242D]">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    meter.wording === "Within typical range" ? "bg-teal" : "bg-[var(--gold)]",
+                  )}
+                  style={{
+                    width: `${Math.max(
+                      4,
+                      Math.min(
+                        100,
+                        ((meter.quotedPrice - meter.range.low) /
+                          Math.max(1, meter.range.high - meter.range.low)) *
+                          100,
+                      ),
+                    )}%`,
+                  }}
+                />
+              </div>
+              <div className="mt-1.5 flex justify-between text-[10.5px] font-semibold text-muted2">
+                <span>₹{meter.range.low}/kg low</span>
+                <span>
+                  Market ₹{meter.currentMarket}/kg · quote {meter.pctVsMarket >= 0 ? "+" : ""}
+                  {meter.pctVsMarket}%
+                </span>
+                <span>₹{meter.range.high}/kg high</span>
+              </div>
+            </div>
+          )}
           {numPrice > 0 && mat && numPrice > mat.currentPrice * 2.5 && (
             <p className="mt-2 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[12.5px] font-semibold text-[var(--pending)]">
               Review recommended: quote is far above the indicative market rate.

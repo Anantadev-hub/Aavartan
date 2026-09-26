@@ -1,69 +1,85 @@
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalQuery, type ActionCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import {
+  classifyWithRoboflow,
+  demoClassify,
+  CONFIDENCE_THRESHOLD,
+  type ClassifyResult,
+} from "./roboflow";
 
 // ---------------------------------------------------------------------------
-// AI service (mock inference). Architecture mirrors a real model deployment:
-// swap `mockClassify` for a fetch() to a FastAPI model endpoint and nothing
-// else in the app changes. The UI clearly labels this as demo inference.
+// AI service — POST /api/ai/classify-material
+//
+// Server-side Roboflow inference with an HONEST demo fallback (spec §42): if
+// Roboflow is unreachable/misconfigured the action returns source="demo" and a
+// visible note "AI service unavailable — using demo prediction." — it never
+// pretends a demo result came from live AI.
+//
+// Flow (spec §20): photo → AI detection → confidence → USER CONFIRMATION →
+// weight → price → lot. AI never auto-creates a sale; requiresConfirmation is
+// true whenever the class is unsupported or confidence < 0.65.
 // ---------------------------------------------------------------------------
 
-type ClassResult = {
-  materialCode: string;
-  confidence: number;
-  candidates: Array<{ materialCode: string; confidence: number }>;
-  model: string;
-};
+export { CONFIDENCE_THRESHOLD };
 
-// Deterministic pseudo-model: hashes the image size + a sample of pixel-ish
-// bytes so the same photo yields the same material (feels like a real model
-// without shipping one). Replace with a real CNN endpoint for production.
-function mockClassify(imageDataUrl: string): ClassResult {
-  // Sample characters spread across the data URL for a stable seed.
-  let seed = 0;
-  const step = Math.max(1, Math.floor(imageDataUrl.length / 64));
-  for (let i = 0; i < imageDataUrl.length; i += step) {
-    seed = (seed * 31 + imageDataUrl.charCodeAt(i)) >>> 0;
-  }
-  const rand = (() => {
-    let s = seed || 1;
-    return () => {
-      s = (s * 1664525 + 1013904223) >>> 0;
-      return s / 4294967296;
-    };
-  })();
+const ALLOWED_MATERIALS = ["pcb", "lcd", "crt", "cable", "battery", "motor", "plastic"];
 
-  const classes = ["pcb", "cable", "battery", "lcd", "crt", "motor", "plastic", "other"];
-  // Demo bias: resolve to PCB ~70% of the time so the scripted SIH demo flow
-  // (photograph a PCB → "PCB — 94%") is reproducible on stage.
-  const primaryIdx = rand() < 0.7 ? 0 : 1 + (seed % (classes.length - 1));
-  const confidence = primaryIdx === 0 ? 0.78 + rand() * 0.2 : 0.55 + rand() * 0.3;
-  const second = classes[(primaryIdx + 1 + Math.floor(rand() * 6)) % classes.length];
-  const candidates = [
-    { materialCode: classes[primaryIdx], confidence: Math.round(confidence * 100) },
-    { materialCode: second, confidence: Math.round((1 - confidence) * 62) },
-  ].sort((a, b) => b.confidence - a.confidence);
+/** Internal lookup (actions have no direct db access). */
+export const materialIdByCode = internalQuery({
+  args: { code: v.string() },
+  handler: async (ctx, { code }) => {
+    const m = await ctx.db
+      .query("materials")
+      .withIndex("by_code", (q) => q.eq("code", code))
+      .unique();
+    return m?._id ?? null;
+  },
+});
 
-  return {
-    materialCode: candidates[0].materialCode,
-    confidence: candidates[0].confidence / 100,
-    candidates,
-    model: "demo-mock-classifier-v1",
-  };
+/** Resolve the mapped material code against the materials catalogue. */
+async function resolveMaterialId(
+  ctx: ActionCtx,
+  materialCode: string | null,
+): Promise<string | null> {
+  if (!materialCode || !ALLOWED_MATERIALS.includes(materialCode)) return null;
+  return ctx.runQuery(internal.ai.materialIdByCode, { code: materialCode });
 }
 
 export const classifyMaterial = action({
   args: { imageDataUrl: v.string() },
-  handler: async (_ctx, { imageDataUrl }): Promise<ClassResult> => {
-    // Validate input is a data URL image (file type validation at the boundary).
+  handler: async (ctx, { imageDataUrl }): Promise<ClassifyResult & { materialId: string | null }> => {
+    // ---- Validate image (spec §44): type + size at the boundary -----------
     if (!imageDataUrl.startsWith("data:image/")) {
-      throw new Error("Invalid image payload");
+      throw new Error("Invalid image payload — expected a data URL image");
     }
     if (imageDataUrl.length > 3_500_000) {
-      throw new Error("Image too large");
+      throw new Error("Image too large — compress before upload");
     }
-    // PRODUCTION: const res = await fetch(`${process.env.AI_SERVICE_URL}/classify`, {...});
-    const result = mockClassify(imageDataUrl);
-    return result;
+
+    // ---- Real inference first, server-side --------------------------------
+    const rf = await classifyWithRoboflow(imageDataUrl);
+    if (rf) {
+      const materialId = await resolveMaterialId(ctx, rf.materialCode);
+      return { ...rf, materialId };
+    }
+
+    // ---- Honest demo fallback --------------------------------------------
+    const demo = demoClassify(imageDataUrl);
+    const materialId = await resolveMaterialId(ctx, demo.materialCode);
+    return { ...demo, materialId };
+  },
+});
+
+// Lightweight status probe for demo screens ("AI: live Roboflow" vs demo mode).
+export const aiStatus = action({
+  args: {},
+  handler: async (_ctx): Promise<{ mode: "roboflow" | "demo"; model: string }> => {
+    const configured = Boolean(process.env.ROBOFLOW_API_KEY && process.env.ROBOFLOW_MODEL_ID);
+    return {
+      mode: configured ? "roboflow" : "demo",
+      model: process.env.ROBOFLOW_MODEL_ID ?? "demo-mock-classifier-v1",
+    };
   },
 });
 

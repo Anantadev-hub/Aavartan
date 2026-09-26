@@ -47,6 +47,13 @@ export function percentChange(current: number, prev: number): number {
   return Math.round(((current - prev) / prev) * 1000) / 10;
 }
 
+/** Normalize stored AI confidence to a 0–100 integer for display
+ *  (tolerates legacy 0–1 fractions so the badge never reads "0%"). */
+export function aiConfidencePercent(v: number | null | undefined): number | null {
+  if (v == null || !Number.isFinite(v)) return null;
+  return v > 1 ? Math.round(v) : Math.round(v * 100);
+}
+
 /** Downscale an image file to a compact JPEG data URL (demo storage). */
 export function fileToCompressedDataUrl(file: File, maxSize = 720, quality = 0.72): Promise<string> {
   return new Promise((resolve, reject) => {

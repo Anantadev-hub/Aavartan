@@ -6,6 +6,8 @@ import { Doc, Id } from "./_generated/dataModel";
 // ---------------------------------------------------------------------------
 // Profiles — role selection lives here, clearly separate from auth. The demo
 // onboarding creates a profile with clearly-marked demo data (mock phone).
+// Spec §14/15/16 fields: phone, preferred_language, collection_area; recycler
+// onboarding also records facility material preferences + pickup availability.
 // ---------------------------------------------------------------------------
 
 export const myProfile = query({
@@ -26,8 +28,14 @@ export const createProfile = mutation({
   args: {
     role: v.union(v.literal("collector"), v.literal("recycler")),
     name: v.string(),
+    phone: v.optional(v.string()),
+    preferredLanguage: v.optional(v.union(v.literal("en"), v.literal("hi"), v.literal("mr"))),
+    collectionArea: v.optional(v.string()),
   },
-  handler: async (ctx, { role, name }): Promise<Doc<"profiles">> => {
+  handler: async (
+    ctx,
+    { role, name, phone, preferredLanguage, collectionArea },
+  ): Promise<Doc<"profiles">> => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Sign in first");
 
@@ -51,9 +59,17 @@ export const createProfile = mutation({
       userId,
       role,
       name: name.trim() || (role === "collector" ? "Rahul Kumar" : "GreenCycle Recycling"),
-      phone: role === "collector" ? "+91 98••• ••210 (demo)" : "+91 98100 12345 (demo)",
+      phone:
+        phone && phone.trim() !== ""
+          ? phone
+          : role === "collector"
+            ? "+91 98••• ••210 (demo)"
+            : "+91 98100 12345 (demo)",
+      preferredLanguage,
+      collectionArea,
       recyclerId,
       createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
     const profile = await ctx.db.get(profileId);
     if (!profile) throw new Error("Profile creation failed");

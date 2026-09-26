@@ -212,6 +212,7 @@ type MatchedRecycler = Doc<"recyclers"> & {
   acceptsMaterial: boolean;
   rate: number;
   matchScore: number;
+  matchReasons: string[]; // visible transparency reasons (§26)
   estimatedValue: number | null;
 };
 
@@ -272,4 +273,117 @@ export function useFacility(recyclerId: Id<"recyclers">) {
 
 export function useSendSync() {
   return useMutation(api.sync.syncQueue);
+}
+
+// ---- Spec §24/§32/§33/§35/§40 insight hooks (same offline-cache pattern) ----
+
+type FairMeter = {
+  currentMarket: number;
+  quotedPrice: number;
+  range: { low: number; high: number };
+  wording: string;
+  pctVsMarket: number;
+  differencePerKg: number;
+  isReviewSignal: boolean;
+};
+
+export function useFairPriceMeter(
+  materialCode: string | undefined,
+  quotedPrice: number | undefined,
+) {
+  const live = useQuery(
+    api.insights.fairPriceMeter,
+    materialCode && quotedPrice && quotedPrice > 0 ? { materialCode, quotedPrice } : "skip",
+  );
+  const key = `fairMeter.${materialCode ?? "x"}.${quotedPrice ?? "x"}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined ? live : cachedOrUndefined<FairMeter>(key);
+}
+
+type Simulator = {
+  totalWeightKg: number;
+  mixedSale: number;
+  sortedSale: number;
+  mixedRate: number;
+  potentialDifference: number;
+  split: Array<{ code: string; share: number; pricePerKg: number; weightKg: number; value: number }>;
+  note: string;
+};
+
+export function useEarningsSimulator(weightKg: number) {
+  const live = useQuery(
+    api.insights.earningsSimulator,
+    weightKg > 0 ? { totalWeightKg: weightKg } : "skip",
+  );
+  const key = `simulator.${weightKg}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined ? live : cachedOrUndefined<Simulator>(key);
+}
+
+type LedgerRow = {
+  _id: string;
+  amount: number;
+  createdAt: number;
+  referenceId: string | null;
+  materialCode: string | null;
+  paymentMethod: string | null;
+};
+
+export function useEarningsLedger(collectorId: Id<"profiles"> | undefined) {
+  const live = useQuery(api.insights.earningsLedger, collectorId ? { collectorId } : "skip");
+  const key = `ledger.${collectorId ?? "none"}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined ? live : cachedOrUndefined<LedgerRow[]>(key);
+}
+
+type HeatmapData = {
+  areas: Array<{
+    _id: string;
+    area: string;
+    city: string;
+    lots: number;
+    weightKg: number;
+    lat: number;
+    lng: number;
+    intensity: number;
+  }>;
+  disclaimer: string;
+};
+
+export function useCollectionAreasHeatmap() {
+  const live = useQuery(api.insights.collectionAreasHeatmap, {});
+  useEffect(() => {
+    if (live) writeCache("heatmap", live);
+  }, [live]);
+  return live !== undefined ? live : cachedOrUndefined<HeatmapData>("heatmap");
+}
+
+type AdminSummary = {
+  totalCollectors: number;
+  totalRecyclers: number;
+  totalLots: number;
+  completedTransactions: number;
+  pendingTransactions: number;
+  totalCollectedKg: number;
+  totalEarnings: number;
+  avgMaterialPrice: number;
+  materialDistribution: Array<{ code: string; weightKg: number }>;
+  transactionStatus: Array<{ status: string; count: number }>;
+  priceTrend: Array<{ day: string; avgPrice: number }>;
+  collectionAreas: Array<{ _id: string; area: string; lots: number; weightKg: number; intensity: number }>;
+  note: string;
+};
+
+export function useAdminSummary() {
+  const live = useQuery(api.insights.adminSummary, {});
+  useEffect(() => {
+    if (live) writeCache("adminSummary", live);
+  }, [live]);
+  return live !== undefined ? live : cachedOrUndefined<AdminSummary>("adminSummary");
 }

@@ -224,6 +224,20 @@ export default function FindRecycler({
                 </p>
               )}
 
+              {/* Visible match reasons (§26) — transparency, not black-box AI. */}
+              {r.matchReasons?.length > 0 && (
+                <p className="mt-2 flex flex-wrap gap-1">
+                  {r.matchReasons.map((reason) => (
+                    <span
+                      key={reason}
+                      className="rounded-full bg-[#064E3B]/60 px-2 py-0.5 text-[10px] font-bold text-teal"
+                    >
+                      {reason}
+                    </span>
+                  ))}
+                </p>
+              )}
+
               <div className="mt-3 flex items-center justify-between gap-2">
                 <ClayBadge tone={r.verified ? "green" : "amber"}>
                   {r.authorizationStatus}

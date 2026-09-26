@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { type Doc, type Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
 import { conditionValidator, lotStatusValidator, paymentMethodValidator } from "./schema";
 
@@ -33,9 +34,75 @@ function demoHash(input: string): string {
   return `${h1.toString(16).padStart(8, "0")}${h2.toString(16).padStart(8, "0")}`;
 }
 
+// Verification reference (spec §30): HANDOVER-KC-8F42A1 style.
+function nextHandoverRef(): string {
+  const hex = Math.floor(Math.random() * 0xffffff)
+    .toString(16)
+    .padStart(6, "0")
+    .toUpperCase();
+  return `HANDOVER-KC-${hex}`;
+}
+
+// Create (or fetch) the spec transaction row for a quoted/accepted lot (§28).
+async function ensureTransaction(
+  ctx: MutationCtx,
+  lot: Doc<"lots">,
+  recyclerId: Id<"recyclers">,
+  quotedPrice: number,
+): Promise<Id<"transactions">> {
+  const existing = await ctx.db
+    .query("transactions")
+    .withIndex("by_lot", (q) => q.eq("lotId", lot._id))
+    .collect();
+  if (existing.length > 0) return existing[0]._id;
+  const now = Date.now();
+  return ctx.db.insert("transactions", {
+    lotId: lot._id,
+    referenceId: lot.referenceId,
+    recyclerId,
+    collectorId: lot.collectorId,
+    materialCode: lot.materialCode,
+    weight: lot.weight,
+    quotedPrice,
+    finalPrice: Math.round(quotedPrice * lot.weight),
+    paymentStatus: "PENDING",
+    transactionStatus: "ACCEPTED",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+// Patch the transaction row for a lot through the status machine (§29).
+async function patchTransaction(
+  ctx: MutationCtx,
+  lotId: Id<"lots">,
+  patch: Partial<{
+    paymentStatus: "PENDING" | "PAID";
+    paymentMethod: "CASH" | "DIGITAL";
+    transactionStatus:
+      | "CREATED"
+      | "ACCEPTED"
+      | "HANDOVER_PENDING"
+      | "HANDED_OVER"
+      | "PAYMENT_PENDING"
+      | "COMPLETED"
+      | "CANCELLED";
+  }>,
+) {
+  const txs = await ctx.db
+    .query("transactions")
+    .withIndex("by_lot", (q) => q.eq("lotId", lotId))
+    .collect();
+  for (const tx of txs) {
+    await ctx.db.patch(tx._id, { ...patch, updatedAt: Date.now() });
+  }
+  return txs[0]?._id ?? null;
+}
+
 const CONDITION_MULTIPLIER: Record<string, number> = { good: 1, mixed: 0.9, damaged: 0.7 };
 
-// Rules-based anomaly detection. Returns flags; never blocks, never accuses.
+// Rules-based anomaly detection (§34). Returns review signals — never blocks,
+// never accuses. Severity is always "review" per the spec's vocabulary.
 function detectAnomalies(lot: {
   materialCode: string;
   weight: number;
@@ -43,25 +110,25 @@ function detectAnomalies(lot: {
   condition: string;
   quotedPrice?: number;
   finalSaleValue?: number;
-}): Array<{ type: string; message: string; severity: "low" | "medium" | "high" }> {
-  const flags: Array<{ type: string; message: string; severity: "low" | "medium" | "high" }> = [];
+}): Array<{ type: string; message: string; severity: "review" }> {
+  const flags: Array<{ type: string; message: string; severity: "review" }> = [];
   if (!Number.isFinite(lot.weight) || lot.weight <= 0) {
-    flags.push({ type: "invalid_weight", message: "Weight is zero or invalid — review recommended", severity: "high" });
+    flags.push({ type: "invalid_weight", message: "Weight is zero or invalid — review recommended", severity: "review" });
   }
   if (lot.weight > 500) {
-    flags.push({ type: "unusual_weight", message: "Unusual weight for a single collection — review recommended", severity: "medium" });
+    flags.push({ type: "unusual_weight", message: "Unusual weight for a single collection — review recommended", severity: "review" });
   }
   if (lot.quotedPrice && lot.estimatedValue > 0 && lot.weight > 0) {
     const estRate = lot.estimatedValue / lot.weight;
     if (lot.quotedPrice > estRate * 2.5) {
-      flags.push({ type: "extreme_price", message: "Quoted price far above indicative market rate — review recommended", severity: "medium" });
+      flags.push({ type: "extreme_price", message: "Quoted price far above indicative market rate — review recommended", severity: "review" });
     }
     if (lot.condition === "damaged" && lot.quotedPrice > estRate * 1.2) {
-      flags.push({ type: "condition_price_mismatch", message: "Damaged condition priced above estimate — review recommended", severity: "low" });
+      flags.push({ type: "condition_price_mismatch", message: "Damaged condition priced above estimate — review recommended", severity: "review" });
     }
   }
   if (lot.finalSaleValue && lot.estimatedValue > 0 && lot.finalSaleValue > lot.estimatedValue * 2) {
-    flags.push({ type: "extreme_price", message: "Final value far above the AI estimate — review recommended", severity: "medium" });
+    flags.push({ type: "extreme_price", message: "Final value far above the AI estimate — review recommended", severity: "review" });
   }
   return flags;
 }
@@ -101,7 +168,9 @@ export const createLot = mutation({
     source: v.optional(v.string()),
     photoDataUrl: v.optional(v.string()),
     aiMaterialCode: v.optional(v.string()),
-    aiConfidence: v.optional(v.number()),
+    aiDetectedClass: v.optional(v.string()),
+    aiConfidence: v.optional(v.number()), // stored as 0-100 integer (UI contract)
+    aiSource: v.optional(v.union(v.literal("roboflow"), v.literal("demo"))),
     locationLabel: v.string(),
     lat: v.optional(v.number()),
     lng: v.optional(v.number()),
@@ -118,6 +187,14 @@ export const createLot = mutation({
     const rate = m.currentPrice * (CONDITION_MULTIPLIER[args.condition] ?? 1);
     const estimatedValue = Math.round(args.weight * rate);
     const referenceId = await nextReferenceId(ctx);
+    // Normalize AI confidence to the UI contract (0-100 integer) regardless of
+    // what the client sent (§45: never trust client-provided AI values).
+    const aiConfidenceNormalized =
+      args.aiConfidence !== undefined
+        ? args.aiConfidence > 1
+          ? Math.round(args.aiConfidence)
+          : Math.round(args.aiConfidence * 100)
+        : undefined;
     const lotId = await ctx.db.insert("lots", {
       referenceId,
       collectorId: args.collectorId,
@@ -130,7 +207,9 @@ export const createLot = mutation({
       source: args.source,
       photoDataUrl: args.photoDataUrl,
       aiMaterialCode: args.aiMaterialCode,
-      aiConfidence: args.aiConfidence,
+      aiDetectedClass: args.aiDetectedClass,
+      aiConfidence: aiConfidenceNormalized,
+      aiSource: args.aiSource,
       estimatedValue,
       locationLabel: args.locationLabel,
       lat: args.lat,
@@ -195,6 +274,7 @@ export const quoteLot = mutation({
       finalSaleValue,
       updatedAt: now,
     });
+    await ensureTransaction(ctx, lot, recyclerId, quotedPrice);
     await storeAnomalies(ctx, lotId, {
       materialCode: lot.materialCode,
       weight: lot.weight,
@@ -207,11 +287,19 @@ export const quoteLot = mutation({
   },
 });
 
-// ---- Handover: two-sided confirmation, then a digital record ---------------
+// ---- Handover: two-sided confirmation, then a digital record (§30) --------
+// The record is called a "Digital Handover Record" — explicitly not blockchain.
 
 export const confirmHandover = mutation({
-  args: { lotId: v.id("lots"), by: v.union(v.literal("collector"), v.literal("recycler")) },
-  handler: async (ctx, { lotId, by }) => {
+  args: {
+    lotId: v.id("lots"),
+    by: v.union(v.literal("collector"), v.literal("recycler")),
+    photoDataUrl: v.optional(v.string()),
+    weightVerified: v.optional(v.number()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+  },
+  handler: async (ctx, { lotId, by, photoDataUrl, weightVerified, latitude, longitude }) => {
     const lot = await ctx.db.get(lotId);
     if (!lot) throw new Error("Lot not found");
     if (lot.status !== "accepted") throw new Error("Handover only after acceptance");
@@ -221,11 +309,12 @@ export const confirmHandover = mutation({
     const recyclerConfirmed =
       by === "recycler" ? true : (lot.handoverConfirmedByRecycler ?? false);
     const both = collectorConfirmed && recyclerConfirmed;
-    const handoverRef =
-      lot.handoverRef ?? `DH-${lot.referenceId}-${now.toString(36).toUpperCase()}`;
+    const handoverRef = lot.handoverRef ?? nextHandoverRef();
     const handoverHash =
       lot.handoverHash ??
-      demoHash(`${lot.referenceId}|${lot.weight}|${collectorConfirmed}|${recyclerConfirmed}|${now}`);
+      demoHash(
+        `${lot.referenceId}|${weightVerified ?? lot.weight}|${collectorConfirmed}|${recyclerConfirmed}|${now}`,
+      );
     await ctx.db.patch(lotId, {
       handoverConfirmedByCollector: collectorConfirmed,
       handoverConfirmedByRecycler: recyclerConfirmed,
@@ -236,6 +325,33 @@ export const confirmHandover = mutation({
       paymentStatus: both ? "pending" : lot.paymentStatus,
       updatedAt: now,
     });
+
+    const transactionId = await patchTransaction(ctx, lotId, {
+      transactionStatus: both ? "HANDED_OVER" : "HANDOVER_PENDING",
+    });
+
+    // First confirmation generates the record shell; the second (completing)
+    // confirmation writes the verified-weight/photo row (§11).
+    if (transactionId && both) {
+      const existing = await ctx.db
+        .query("handoverRecords")
+        .withIndex("by_lot", (q) => q.eq("lotId", lotId))
+        .collect();
+      if (existing.length === 0) {
+        await ctx.db.insert("handoverRecords", {
+          transactionId,
+          lotId,
+          verificationReference: handoverRef,
+          photoDataUrl: photoDataUrl ?? lot.photoDataUrl,
+          weightVerified: weightVerified ?? lot.weight,
+          latitude,
+          longitude,
+          verificationHash: handoverHash,
+          handoverTime: now,
+        });
+      }
+    }
+
     return { both, handoverRef, handoverHash };
   },
 });
@@ -254,6 +370,29 @@ export const markPaymentCompleted = mutation({
       status: "completed",
       updatedAt: now,
     });
+
+    // Transaction mirrors payment (§31), then the collector's earnings ledger
+    // row is written exactly once (§12).
+    const txId = await patchTransaction(ctx, lotId, {
+      paymentStatus: "PAID",
+      paymentMethod: method === "upi" ? "DIGITAL" : "CASH",
+      transactionStatus: "COMPLETED",
+    });
+    if (txId && lot.finalSaleValue) {
+      const existing = await ctx.db
+        .query("earnings")
+        .withIndex("by_transaction", (q) => q.eq("transactionId", txId))
+        .collect();
+      if (existing.length === 0) {
+        await ctx.db.insert("earnings", {
+          userId: lot.collectorId,
+          transactionId: txId,
+          lotId,
+          amount: lot.finalSaleValue,
+          createdAt: now,
+        });
+      }
+    }
     return { ok: true, finalSaleValue: lot.finalSaleValue ?? null };
   },
 });

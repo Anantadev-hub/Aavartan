@@ -9,7 +9,7 @@ import {
 } from "@/components/icons";
 import { ClayButton, ClayCard, ClayBadge, LoadingState, OfflineBanner, Toasts, SyncIndicator } from "@/components/ui/kit";
 import { useAppState, setOnline } from "@/lib/app-state";
-import { useProfile, useRecyclerStats, useAvailableLots, useMaterials, useFacility } from "@/hooks/use-kc-data";
+import { useProfile, useRecyclerStats, useAvailableLots, useMaterials, useFacility, useCollectionAreasHeatmap } from "@/hooks/use-kc-data";
 import { formatINR, timeAgo, formatKg } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import RecyclerLots from "./RecyclerLots";
@@ -148,6 +148,8 @@ function RecyclerDashboard({
   const stats = useRecyclerStats(recyclerId);
   const incoming = useAvailableLots();
   const { materials } = useMaterials();
+  // §35 demo collection heatmap (fictional density data, clearly labelled).
+  const heatmap = useCollectionAreasHeatmap();
 
   return (
     <div className="space-y-5">
@@ -183,6 +185,32 @@ function RecyclerDashboard({
           </ClayCard>
         ))}
       </div>
+
+      {/* Collection areas heatmap (§35, demo data) */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-[15px] font-bold uppercase tracking-wide text-navy">Collection areas</h2>
+        <span className="text-[10.5px] font-semibold text-muted2">demo density</span>
+      </div>
+      <ClayCard className="rounded-3xl">
+        <div className="space-y-2">
+          {(heatmap?.areas ?? []).slice(0, 5).map((a) => (
+            <div key={a._id} className="flex items-center gap-3">
+              <span className="w-28 shrink-0 truncate text-[12.5px] font-bold text-navy">{a.area}</span>
+              <div className="h-3 flex-1 overflow-hidden rounded-full bg-[#20242D]">
+                <div
+                  className="h-full rounded-full bg-[linear-gradient(90deg,#047857,#10B981)]"
+                  style={{ width: `${Math.max(8, Math.round(a.intensity * 100))}%` }}
+                />
+              </div>
+              <span className="w-20 shrink-0 text-right text-[11px] font-semibold text-muted2">
+                {a.lots} lots
+              </span>
+            </div>
+          ))}
+          {!heatmap && <p className="text-sm text-muted2">Loading density…</p>}
+        </div>
+        <p className="mt-3 text-[10.5px] text-muted2">{heatmap?.disclaimer ?? ""}</p>
+      </ClayCard>
 
       {/* Incoming preview */}
       <div className="flex items-center justify-between">

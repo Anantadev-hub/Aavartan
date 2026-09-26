@@ -17,7 +17,9 @@ type QueuedDraft = {
   source?: string;
   photoDataUrl?: string;
   aiMaterialCode?: string;
-  aiConfidence?: number;
+  aiDetectedClass?: string;
+  aiConfidence?: number; // 0..1 fraction; server tolerates 0-100 payloads
+  aiSource?: "roboflow" | "demo";
   locationLabel: string;
   capturedAt: number;
   estimatedValue: number;

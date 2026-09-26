@@ -7,8 +7,11 @@
 
 const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
 
-/** Configurable demo verification code (not a secret; demo-mode only). */
-export const DEMO_OTP: string = env.VITE_DEMO_OTP ?? "482913";
+/**
+ * Demo verification code (spec §14: OTP = 123456, clearly DEMO — no real SMS).
+ * VITE_DEMO_OTP can still override it for the SIH stage environment.
+ */
+export const DEMO_OTP: string = env.VITE_DEMO_OTP ?? "123456";
 
 export type Role = "collector" | "recycler";
 

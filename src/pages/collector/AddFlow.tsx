@@ -13,6 +13,18 @@ import { cn } from "@/lib/utils";
 
 type Step = "capture" | "analyzing" | "result" | "details";
 
+// Result shape from the server-side AI action (src/convex/ai.ts + roboflow.ts).
+type AiResult = {
+  source: "roboflow" | "demo";
+  isDemoFallback: boolean;
+  demoNote: string | null;
+  detectedClass: string | null;
+  materialCode: string | null;
+  confidence: number;
+  supported: boolean;
+  requiresConfirmation: boolean;
+};
+
 const CONDITIONS = [
   { key: "good", labelKey: "add.condGood" },
   { key: "mixed", labelKey: "add.condMixed" },
@@ -37,7 +49,7 @@ export default function AddFlow({
 
   const [step, setStep] = useState<Step>("capture");
   const [photo, setPhoto] = useState<string | null>(null);
-  const [ai, setAi] = useState<{ materialCode: string; confidence: number } | null>(null);
+  const [ai, setAi] = useState<AiResult | null>(null);
   const [material, setMaterial] = useState<string>("pcb");
   const [weightText, setWeightText] = useState<string>("0.0");
   const [condition, setCondition] = useState<"good" | "mixed" | "damaged">("good");
@@ -59,14 +71,20 @@ export default function AddFlow({
       const dataUrl = await fileToCompressedDataUrl(file);
       setPhoto(dataUrl);
       setStep("analyzing");
-      // Demo inference via the Convex action seam (src/convex/ai.ts). Swap the
-      // mock model inside that action for a FastAPI endpoint in production.
+      // Server-side Roboflow via the Convex action seam (src/convex/ai.ts) —
+      // the API key never reaches this client. Demo fallback is labelled.
       const result = await classifyAction({ imageDataUrl: dataUrl });
       await new Promise((r) => setTimeout(r, 1400)); // visible "analyzing" state
-      setAi({ materialCode: result.materialCode, confidence: result.confidence });
-      setMaterial(result.materialCode);
+      setAi(result);
+      // Never force a low-confidence/unsupported prediction (spec §20): the AI
+      // material is preselected only when supported, else the user chooses.
+      setMaterial(result.supported && result.materialCode ? result.materialCode : "pcb");
       setStep("result");
-      if (result.confidence < 0.7) pushToast(t("add.lowConfidence"), "info");
+      if (result.isDemoFallback) {
+        pushToast(result.demoNote ?? "Demo AI result", "info");
+      } else if (result.requiresConfirmation) {
+        pushToast(t("add.lowConfidence"), "info");
+      }
     } catch {
       pushToast("AI identification failed. Please select the material manually.", "error");
       setStep("details");
@@ -90,8 +108,10 @@ export default function AddFlow({
           pieces: pieces ? Number(pieces) : undefined,
           notes: source || undefined,
           photoDataUrl: photo ?? undefined,
-          aiMaterialCode: ai?.materialCode,
+          aiMaterialCode: ai?.materialCode ?? undefined,
+          aiDetectedClass: ai?.detectedClass ?? undefined,
           aiConfidence: ai ? Math.round(ai.confidence * 100) : undefined,
+          aiSource: ai?.source,
           locationLabel,
           syncOrigin: "online",
           sendNow: false,
@@ -108,8 +128,10 @@ export default function AddFlow({
           pieces: pieces ? Number(pieces) : undefined,
           notes: source || undefined,
           photoDataUrl: photo ?? undefined,
-          aiMaterialCode: ai?.materialCode,
-          aiConfidence: ai ? Math.round(ai.confidence * 100) : undefined,
+          aiMaterialCode: ai?.materialCode ?? undefined,
+          aiDetectedClass: ai?.detectedClass ?? undefined,
+          aiConfidence: ai ? ai.confidence : undefined,
+          aiSource: ai?.source,
           locationLabel,
           capturedAt: Date.now(),
           estimatedValue: estimate?.estimatedValue ?? 0,
@@ -217,7 +239,7 @@ export default function AddFlow({
                 </p>
                 <p className="truncate text-xl font-extrabold text-navy">
                   {materials?.find((m) => m.code === ai.materialCode)?.name ??
-                    ai.materialCode.toUpperCase()}
+                    (ai.detectedClass ?? "Not identified")}
                 </p>
               </div>
               <div className="text-right">
@@ -227,7 +249,19 @@ export default function AddFlow({
                 <p className="text-[10.5px] font-semibold text-muted2">confidence</p>
               </div>
             </div>
-            {ai.confidence < 0.7 && (
+            {/* Honest source label (spec §42): live Roboflow vs demo fallback. */}
+            {ai.isDemoFallback && (
+              <p className="mt-3 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--pending)]">
+                {ai.demoNote ?? "AI service unavailable — using demo prediction."}
+              </p>
+            )}
+            {!ai.isDemoFallback && !ai.supported && (
+              <p className="mt-3 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--pending)]">
+                Detected “{ai.detectedClass ?? "unknown"}” ({Math.round(ai.confidence * 100)}%) —
+                not in the supported list. Please choose the material below.
+              </p>
+            )}
+            {ai.supported && ai.confidence < 0.7 && (
               <p className="mt-3 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--pending)]">
                 {t("add.lowConfidence")}
               </p>
@@ -267,11 +301,13 @@ export default function AddFlow({
                 <p className="truncate text-[15px] font-extrabold text-navy">{materialName}</p>
                 {ai && (
                   <p className="text-[11.5px] text-muted2">
-                    AI verified — {Math.round(ai.confidence * 100)}%
+                    {ai.isDemoFallback ? "Demo AI" : "AI"} — {Math.round(ai.confidence * 100)}%
                   </p>
                 )}
               </div>
-              <ClayBadge tone={ai ? "teal" : "neutral"}>{ai ? "AI verified" : "Manual"}</ClayBadge>
+              <ClayBadge tone={ai ? "teal" : "neutral"}>
+                {ai ? (ai.isDemoFallback ? "Demo AI" : "AI verified") : "Manual"}
+              </ClayBadge>
             </div>
           )}
 

@@ -1,15 +1,23 @@
-import { WalletIcon, ChevronRightIcon } from "@/components/icons";
-import { EmptyState, LoadingState, ClayCard, ClaySection, StatusPill } from "@/components/ui/kit";
-import { useAppState } from "@/lib/app-state";
+import { WalletIcon, ChevronRightIcon, SparkleIcon } from "@/components/icons";
+import { EmptyState, LoadingState, ClayCard, ClaySection, StatusPill, ClayButton } from "@/components/ui/kit";
+import { useAppState, pushToast } from "@/lib/app-state";
+import { speak } from "@/lib/app-state";
 import { formatINR, formatDate, formatKg } from "@/lib/format";
-import { useEarnings, useMaterials, useMyLots, useProfile } from "@/hooks/use-kc-data";
+import { useEarnings, useMaterials, useMyLots, useProfile, useEarningsSimulator, useEarningsLedger } from "@/hooks/use-kc-data";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 export default function CollectorEarnings() {
-  const { t } = useAppState();
+  const { t, lang } = useAppState();
   const profile = useProfile();
   const { summary, monthly } = useEarnings(profile?._id);
   const lots = useMyLots(profile?._id);
   const { materials } = useMaterials();
+
+  // Sell Smarter (§33): mixed vs sorted comparison — a labelled estimate.
+  const [simWeight, setSimWeight] = useState(10);
+  const sim = useEarningsSimulator(simWeight);
+  const ledger = useEarningsLedger(profile?._id);
 
   if (summary === undefined || lots === undefined) {
     return <LoadingState label={t("common.loading")} />;
@@ -45,6 +53,68 @@ export default function CollectorEarnings() {
           ))}
         </div>
       </ClayCard>
+
+      {/* Sell Smarter (§33) — clearly labelled estimate */}
+      <ClaySection title="Sell Smarter">
+        <ClayCard className="rounded-3xl">
+          <div className="flex items-center gap-2">
+            <SparkleIcon className="size-4.5 text-teal" />
+            <p className="text-[13.5px] font-extrabold text-navy">Mixed vs sorted sale (estimate)</p>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            {[5, 10, 25, 50].map((w) => (
+              <button
+                key={w}
+                onClick={() => setSimWeight(w)}
+                aria-pressed={simWeight === w}
+                className={cn(
+                  "min-h-10 rounded-xl px-3.5 text-[12.5px] font-bold clay-pressable",
+                  simWeight === w ? "bg-navy text-teal" : "bg-card text-muted2 shadow-[var(--clay-1)]",
+                )}
+              >
+                {w} kg
+              </button>
+            ))}
+          </div>
+          {sim && (
+            <>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="clay-flat rounded-2xl px-3 py-2.5 text-center">
+                  <p className="text-[10px] font-bold uppercase text-muted2">Mixed sale</p>
+                  <p className="text-lg font-extrabold text-navy">{formatINR(sim.mixedSale)}</p>
+                </div>
+                <div className="rounded-2xl bg-[#064E3B] px-3 py-2.5 text-center">
+                  <p className="text-[10px] font-bold uppercase text-teal/80">Sorted sale</p>
+                  <p className="text-lg font-extrabold text-teal">{formatINR(sim.sortedSale)}</p>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center justify-between rounded-2xl bg-[#451A03] px-3.5 py-2.5">
+                <p className="text-[12.5px] font-semibold text-[var(--pending)]">
+                  Potential extra by sorting
+                </p>
+                <p className="text-[15px] font-extrabold text-[var(--gold)]">
+                  +{formatINR(sim.potentialDifference)}
+                </p>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-[10.5px] text-muted2">{sim.note}</p>
+                <button
+                  onClick={() =>
+                    speak(
+                      `Sorted sale estimate ${Math.round(sim.sortedSale / 10) * 10} rupees for ${simWeight} kilograms. Mixed sale about ${Math.round(sim.mixedSale / 10) * 10} rupees.`,
+                      lang,
+                    )
+                  }
+                  aria-label="Play estimate aloud"
+                  className="clay-sm flex size-9 shrink-0 items-center justify-center text-teal"
+                >
+                  🔊
+                </button>
+              </div>
+            </>
+          )}
+        </ClayCard>
+      </ClaySection>
 
       {/* Monthly bars */}
       {(monthly?.length ?? 0) > 0 && (
