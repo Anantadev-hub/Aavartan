@@ -5,11 +5,15 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
   BuildingIcon, GridIcon, LayersIcon, LogOutIcon, MapPinIcon, PhoneIcon, RecycleIcon,
-  ShieldCheckIcon, StarIcon, TruckIcon, ClockIcon,
+  ShieldCheckIcon, StarIcon, TruckIcon, ClockIcon, WalletIcon,
 } from "@/components/icons";
 import { ClayButton, ClayCard, ClayBadge, LoadingState, OfflineBanner, Toasts, SyncIndicator } from "@/components/ui/kit";
 import { useAppState, setOnline } from "@/lib/app-state";
-import { useProfile, useRecyclerStats, useAvailableLots, useMaterials, useFacility, useCollectionAreasHeatmap } from "@/hooks/use-kc-data";
+import {
+  useProfile, useRecyclerStats, useAvailableLots, useMaterials, useFacility,
+  useCollectionAreasHeatmap, usePurchasesSummary, isLocalProfile, useRecyclerBindingRepair,
+  type LotWithCollector,
+} from "@/hooks/use-kc-data";
 import { formatINR, timeAgo, formatKg } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import RecyclerLots from "./RecyclerLots";
@@ -30,6 +34,10 @@ export default function RecyclerApp() {
   const navigate = useNavigate();
   const profile = useProfile();
   const [tab, setTab] = useState<Tab>("home");
+
+  // Repair a signed-in backend profile that predates its facility binding so
+  // the portal never loops to /auth over a missing recyclerId.
+  useRecyclerBindingRepair();
 
   // Seed reference data (no-op after first run).
   const seed = useMutation(api.seed.seedIfEmpty);
@@ -59,9 +67,14 @@ export default function RecyclerApp() {
   if (profile === null) {
     return <Redirect to="/auth?role=recycler" />;
   }
-  if (profile.role !== "recycler" || !profile.recyclerId) {
+  if (profile.role !== "recycler") {
     return <Redirect to="/app" />;
   }
+  // A signed-in recycler whose facility binding is still missing (seed raced
+  // the profile creation) renders the portal with empty facility data and a
+  // clear note instead of bouncing — the reactive binding repair above fills
+  // it in as soon as the facility exists.
+  const recyclerId = profile.recyclerId ?? null;
 
   return (
     <div className="min-h-dvh bg-background">
@@ -93,10 +106,10 @@ export default function RecyclerApp() {
       <OfflineBanner />
 
       <main className="mx-auto max-w-6xl px-4 pb-28 pt-4">
-        {tab === "home" && <RecyclerDashboard recyclerId={profile.recyclerId} onGoTab={setTab} />}
-        {tab === "lots" && <RecyclerLots recyclerId={profile.recyclerId} />}
-        {tab === "deals" && <RecyclerTransactions recyclerId={profile.recyclerId} />}
-        {tab === "facility" && <RecyclerFacility recyclerId={profile.recyclerId} />}
+        {tab === "home" && <RecyclerDashboard recyclerId={recyclerId} onGoTab={setTab} />}
+        {tab === "lots" && <RecyclerLots recyclerId={recyclerId} />}
+        {tab === "deals" && <RecyclerTransactions recyclerId={recyclerId} />}
+        {tab === "facility" && <RecyclerFacility recyclerId={recyclerId} />}
       </main>
 
       {/* Bottom nav — recycler */}
@@ -141,11 +154,12 @@ function RecyclerDashboard({
   recyclerId,
   onGoTab,
 }: {
-  recyclerId: Id<"recyclers">;
+  recyclerId: Id<"recyclers"> | null;
   onGoTab: (t: Tab) => void;
 }) {
   const { t } = useAppState();
-  const stats = useRecyclerStats(recyclerId);
+  const stats = useRecyclerStats(recyclerId ?? undefined);
+  const purchases = usePurchasesSummary(recyclerId ?? undefined);
   const incoming = useAvailableLots();
   const { materials } = useMaterials();
   // §35 demo collection heatmap (fictional density data, clearly labelled).
@@ -160,12 +174,23 @@ function RecyclerDashboard({
         </p>
       </div>
 
+      {!recyclerId && (
+        <ClayCard className="rounded-3xl border-l-4 border-[var(--pending)]">
+          <p className="text-[13px] font-bold text-navy">Facility binding pending</p>
+          <p className="mt-1 text-[12.5px] text-muted2">
+            Demo facility data is still syncing. Portal stats will appear here — no action needed.
+          </p>
+        </ClayCard>
+      )}
+
       {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-3">
         {[
-          { l: "New lots", v: stats ? String(stats.newLots) : "…", tone: "teal" as const, icon: <LayersIcon className="size-5" /> },
-          { l: "Active", v: stats ? String(stats.active) : "…", tone: "gold" as const, icon: <ClockIcon className="size-5" /> },
-          { l: "Today's value", v: stats ? formatINR(stats.todayValue, { compact: true }) : "…", tone: "navy" as const, icon: <RecycleIcon className="size-5" /> },
+          { l: "Available lots", v: stats ? String(stats.newLots) : "…", tone: "teal" as const, icon: <LayersIcon className="size-5" /> },
+          { l: "Pending verification", v: stats ? String(stats.active) : "…", tone: "gold" as const, icon: <ClockIcon className="size-5" /> },
+          { l: "Completed transactions", v: stats ? String(stats.completed) : "…", tone: "navy" as const, icon: <RecycleIcon className="size-5" /> },
+          { l: "Material received", v: purchases ? formatKg(purchases.totalKg) : "…", tone: "teal" as const, icon: <LayersIcon className="size-5" /> },
+          { l: "This month's purchases", v: purchases ? formatINR(purchases.monthPaid, { compact: true }) : "…", tone: "navy" as const, icon: <WalletIcon className="size-5" /> },
         ].map((s) => (
           <ClayCard key={s.l} className="rounded-3xl">
             <div className="flex items-center justify-between">
@@ -212,15 +237,15 @@ function RecyclerDashboard({
         <p className="mt-3 text-[10.5px] text-muted2">{heatmap?.disclaimer ?? ""}</p>
       </ClayCard>
 
-      {/* Incoming preview */}
+      {/* Incoming preview — §"New Lots Near You" */}
       <div className="flex items-center justify-between">
-        <h2 className="text-[15px] font-bold uppercase tracking-wide text-navy">Incoming lots</h2>
+        <h2 className="text-[15px] font-bold uppercase tracking-wide text-navy">New lots near you</h2>
         <ClayButton size="sm" variant="surface" onClick={() => onGoTab("lots")}>
           View all
         </ClayButton>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        {(incoming ?? []).slice(0, 4).map((lot) => {
+        {(incoming ?? []).slice(0, 4).map((lot: LotWithCollector) => {
           const mat = materials?.find((m) => m.code === lot.materialCode);
           return (
             <ClayCard key={lot._id} className="rounded-3xl">
@@ -237,7 +262,7 @@ function RecyclerDashboard({
                     {mat?.name ?? lot.materialCode} · {formatKg(lot.weight)}
                   </p>
                   <p className="text-[11.5px] text-muted2">
-                    {lot.referenceId} · submitted {timeAgo(lot.createdAt)}
+                    {lot.referenceId} · {lot.collectorName ?? "Collector"} · {timeAgo(lot.createdAt)}
                   </p>
                   <p className="mt-1 text-[13px] font-bold text-teal-deep">
                     Est. {formatINR(lot.estimatedValue)}
@@ -259,8 +284,8 @@ function RecyclerDashboard({
 
 /* ------------------------------ Facility -------------------------------- */
 
-function RecyclerFacility({ recyclerId }: { recyclerId: Id<"recyclers"> }) {
-  const facility = useFacility(recyclerId); // offline-aware (same return shape)
+function RecyclerFacility({ recyclerId }: { recyclerId: Id<"recyclers"> | null }) {
+  const facility = useFacility(recyclerId ?? undefined); // offline-aware
   const { materials } = useMaterials();
   const { t } = useAppState();
 

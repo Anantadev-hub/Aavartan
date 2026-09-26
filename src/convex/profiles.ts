@@ -48,6 +48,7 @@ export const createProfile = mutation({
     let recyclerId: Id<"recyclers"> | undefined;
     if (role === "recycler") {
       // Demo recycler account is bound to the first seeded facility (GreenCycle).
+      // Self-heals: profiles created before the facility existed get bound here.
       const green = await ctx.db
         .query("recyclers")
         .withIndex("by_name", (q) => q.eq("name", "GreenCycle Recycling"))
@@ -89,5 +90,30 @@ export const updateProfileName = mutation({
     if (!profile) throw new Error("No profile");
     await ctx.db.patch(profile._id, { name: name.trim() || profile.name });
     return { ok: true };
+  },
+});
+
+/**
+ * Self-heal a recycler profile whose facility binding is missing (e.g. the
+ * profile was created before the demo facility was seeded). Binds the first
+ * seeded facility and returns the updated profile — never creates duplicates.
+ */
+export const ensureRecyclerBinding = mutation({
+  args: {},
+  handler: async (ctx): Promise<Doc<"profiles"> | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (!profile || profile.role !== "recycler" || profile.recyclerId) return profile;
+    const green = await ctx.db
+      .query("recyclers")
+      .withIndex("by_name", (q) => q.eq("name", "GreenCycle Recycling"))
+      .unique();
+    if (!green) return profile;
+    await ctx.db.patch(profile._id, { recyclerId: green._id, updatedAt: Date.now() });
+    return ctx.db.get(profile._id);
   },
 });

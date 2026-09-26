@@ -24,8 +24,9 @@ export type MaterialRow = Doc<"materials">;
  * Profile result: either the live backend profile or a locally-synthesized
  * "Pending Sync" profile created during offline onboarding. Local profiles
  * have no `_id`, so all dependent queries naturally skip (no invalid-id calls).
- * Only collector-role onboarding synthesizes a local profile — recycler
- * facilities need a bound backend facility and fall back to sign-in as before.
+ * Collector onboarding synthesizes a local profile; recycler onboarding ALSO
+ * synthesizes one locally (role gates navigation) — facility-bound data
+ * (dashboard stats, lots) simply stays empty until the backend is reachable.
  */
 export type AppProfile =
   | Doc<"profiles">
@@ -65,8 +66,10 @@ export function useProfile(): AppProfile | Doc<"profiles"> | null | undefined {
   if (live) return live;
   const cached = cachedOrUndefined<Doc<"profiles">>("profile");
   if (cached) return cached;
-  if (pending && pending.role === "collector") {
-    // Offline onboarding: render the app from the locally saved profile.
+  if (pending) {
+    // Offline onboarding (either role): render the app from the locally saved
+    // profile. For recyclers the portal renders with empty facility data
+    // (recyclerId stays undefined) instead of bouncing to sign-in.
     return { ...pending, isLocalProfile: true };
   }
   return live; // undefined = resolving; null = none (existing redirect behavior)
@@ -104,6 +107,22 @@ export function usePendingProfileSync() {
         /* backend unreachable — profile stays pending; never blocks the UI */
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}
+
+/**
+ * Repairs a signed-in backend recycler profile that is missing its facility
+ * binding (created before the demo facility was seeded). Runs once per shell
+ * mount; the reactive profile query re-renders the portal when it succeeds.
+ * Recyclers onboarded fully offline stay on their local profile (Pending Sync)
+ * — no blocking, no error, matching the collector behaviour.
+ */
+export function useRecyclerBindingRepair() {
+  const ensure = useMutation(api.profiles.ensureRecyclerBinding);
+  useEffect(() => {
+    if (!navigator.onLine) return;
+    void ensure({}).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }
@@ -184,7 +203,29 @@ export function useAvailableLots() {
   useEffect(() => {
     if (live) writeCache("lots.available", live);
   }, [live]);
-  return live !== undefined ? live : cachedOrUndefined<Doc<"lots">[]>("lots.available");
+  return live !== undefined ? live : cachedOrUndefined<LotWithCollector[]>("lots.available");
+}
+
+/** Lot rows as returned by listLots — includes the attached collector name. */
+export type LotWithCollector = Doc<"lots"> & { collectorName?: string | null };
+
+/** Recycler purchases summary (§16): the BUY-side ledger of the portal. */
+export function usePurchasesSummary(recyclerId: Id<"recyclers"> | undefined) {
+  const live = useQuery(api.lots.purchasesSummary, recyclerId ? { recyclerId } : "skip");
+  const key = `purchases.${recyclerId ?? "none"}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined
+    ? live
+    : cachedOrUndefined<{
+        totalPaid: number;
+        totalKg: number;
+        monthPaid: number;
+        monthCount: number;
+        purchaseCount: number;
+        byMaterial: Array<{ code: string; weightKg: number; amount: number }>;
+      }>(key);
 }
 
 export function useRecyclerStats(recyclerId: Id<"recyclers"> | undefined) {
@@ -194,6 +235,13 @@ export function useRecyclerStats(recyclerId: Id<"recyclers"> | undefined) {
     if (live) writeCache(key, live);
   }, [live, key]);
   return live !== undefined ? live : cachedOrUndefined<RecyclerStats>(key);
+}
+
+/** True when the profile is a locally-synthesized "Pending Sync" profile. */
+export function isLocalProfile(
+  p: AppProfile | Doc<"profiles"> | null | undefined,
+): p is NonNullable<PendingProfile> & { isLocalProfile: true; role: "collector" | "recycler" } {
+  return !!p && "isLocalProfile" in p && p.isLocalProfile === true;
 }
 
 // ---- Cached variants for screens that query inline -------------------------
@@ -262,9 +310,11 @@ export function useLotTimeline(lotId: Id<"lots"> | string) {
   return live !== undefined ? live : cachedOrUndefined<TimelineData>(key);
 }
 
-export function useFacility(recyclerId: Id<"recyclers">) {
-  const live = useQuery(api.recyclers.getRecycler, { recyclerId });
-  const key = `facility.${recyclerId}`;
+export function useFacility(recyclerId: Id<"recyclers"> | undefined) {
+  // Skip while the facility binding is pending (never call the query with a
+  // null id — Convex validates arguments client-side and would throw).
+  const live = useQuery(api.recyclers.getRecycler, recyclerId ? { recyclerId } : "skip");
+  const key = `facility.${recyclerId ?? "none"}`;
   useEffect(() => {
     if (live) writeCache(key, live);
   }, [live, key]);

@@ -421,7 +421,18 @@ export const listLots = query({
       rows = await ctx.db.query("lots").collect();
     }
     const filtered = status ? rows.filter((r) => r.status === status) : rows;
-    return filtered.sort((a, b) => b.createdAt - a.createdAt);
+    filtered.sort((a, b) => b.createdAt - a.createdAt);
+    // Attach the collector display name for the recycler portal (§9/§10):
+    // transactions must show who sold, not the signed-in recycler's own name.
+    const nameById = new Map<string, string | null>();
+    for (const id of new Set(filtered.map((r) => r.collectorId))) {
+      const p = await ctx.db.get(id);
+      nameById.set(id, p?.name ?? null);
+    }
+    return filtered.map((r) => ({
+      ...r,
+      collectorName: nameById.get(r.collectorId) ?? null,
+    }));
   },
 });
 
@@ -599,6 +610,49 @@ export const recyclerStats = query({
       active: mine.filter((r) => ["accepted", "handed_over"].includes(r.status)).length,
       completed: mine.filter((r) => r.status === "completed").length,
       todayValue,
+    };
+  },
+});
+
+// Recycler purchases summary (§16): the BUY side of the ledger. Never shown
+// as "earnings" — collectors earn, recyclers purchase.
+export const purchasesSummary = query({
+  args: { recyclerId: v.id("recyclers") },
+  handler: async (ctx, { recyclerId }) => {
+    const mine = await ctx.db
+      .query("lots")
+      .withIndex("by_recycler", (q) => q.eq("recyclerId", recyclerId))
+      .collect();
+    const purchased = mine.filter((r) => r.status === "completed" && r.finalSaleValue);
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const totalPaid = purchased.reduce((s, r) => s + (r.finalSaleValue ?? 0), 0);
+    const totalKg = Math.round(purchased.reduce((s, r) => s + r.weight, 0) * 10) / 10;
+    const monthRows = purchased.filter((r) => (r.paymentAt ?? 0) >= startOfMonth.getTime());
+
+    const byMaterial = new Map<string, { weightKg: number; amount: number }>();
+    for (const r of purchased) {
+      const cur = byMaterial.get(r.materialCode) ?? { weightKg: 0, amount: 0 };
+      byMaterial.set(r.materialCode, {
+        weightKg: Math.round((cur.weightKg + r.weight) * 10) / 10,
+        amount: cur.amount + (r.finalSaleValue ?? 0),
+      });
+    }
+
+    return {
+      totalPaid,
+      totalKg,
+      monthPaid: monthRows.reduce((s, r) => s + (r.finalSaleValue ?? 0), 0),
+      monthCount: monthRows.length,
+      purchaseCount: purchased.length,
+      byMaterial: [...byMaterial.entries()]
+        .map(([code, v]) => ({ code, ...v }))
+        .sort((a, b) => b.amount - a.amount),
     };
   },
 });

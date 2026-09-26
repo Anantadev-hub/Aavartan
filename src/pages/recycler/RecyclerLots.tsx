@@ -8,14 +8,16 @@ import {
 import { ClayButton, ClayCard, ClayBadge, Field, ClayInput, EmptyState, LoadingState } from "@/components/ui/kit";
 import { useAppState, pushToast } from "@/lib/app-state";
 import { formatINR, formatKg, formatDateTime, timeAgo, aiConfidencePercent } from "@/lib/format";
-import { useMaterials, useProfile, useAvailableLots, useLotDetail, useFairPriceMeter } from "@/hooks/use-kc-data";
+import {
+  useMaterials, useProfile, useAvailableLots, useLotDetail, useFairPriceMeter,
+  type LotWithCollector,
+} from "@/hooks/use-kc-data";
 import { cn } from "@/lib/utils";
 
-export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers"> }) {
+export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers"> | null }) {
   const { t } = useAppState();
   const incoming = useAvailableLots();
   const { materials } = useMaterials();
-  const profile = useProfile();
   const [reviewing, setReviewing] = useState<string | null>(null);
 
   if (incoming === undefined) return <LoadingState label={t("common.loading")} />;
@@ -25,7 +27,6 @@ export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers
       <ReviewLot
         lotId={reviewing as Id<"lots">}
         recyclerId={recyclerId}
-        collectorName={profile?.name ?? "Collector"}
         onBack={() => setReviewing(null)}
       />
     );
@@ -48,7 +49,7 @@ export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers
         />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
-          {incoming.map((lot) => {
+          {incoming.map((lot: LotWithCollector) => {
             const mat = materials?.find((m) => m.code === lot.materialCode);
             return (
               <ClayCard key={lot._id} className="rounded-3xl">
@@ -96,6 +97,7 @@ export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers
                 </div>
                 <p className="mt-2 flex items-center gap-1.5 text-[11.5px] text-muted2">
                   <MapPinIcon className="size-3.5 shrink-0" /> {lot.locationLabel}
+                  {lot.collectorName ? ` · ${lot.collectorName}` : ""}
                 </p>
               </ClayCard>
             );
@@ -111,12 +113,10 @@ export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers
 function ReviewLot({
   lotId,
   recyclerId,
-  collectorName,
   onBack,
 }: {
   lotId: Id<"lots">;
-  recyclerId: Id<"recyclers">;
-  collectorName: string;
+  recyclerId: Id<"recyclers"> | null;
   onBack: () => void;
 }) {
   const { t } = useAppState();
@@ -128,6 +128,16 @@ function ReviewLot({
   const [rejectMode, setRejectMode] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Hooks MUST run before any early return (React rules of hooks): the fair
+  // price meter previously hung below the loading/not-found branches and
+  // crashed the review screen whenever a lot resolved.
+  const typedPrice = Number(price) || 0;
+  const meterInput = data && data !== null && "lot" in data ? data.lot.materialCode : null;
+  const meter = useFairPriceMeter(
+    meterInput ?? "pcb",
+    typedPrice > 0 ? typedPrice : undefined,
+  );
 
   if (data === undefined) return <LoadingState label={t("common.loading")} />;
   if (data === null) {
@@ -141,20 +151,20 @@ function ReviewLot({
     );
   }
 
-  const { lot } = data;
+  const { lot, collector } = data;
   const mat = materials?.find((m) => m.code === lot.materialCode);
   const matName = mat?.name ?? lot.materialCode.toUpperCase();
-  const numPrice = Number(price) || 0;
+  const numPrice = typedPrice;
   const finalValue = numPrice > 0 ? Math.round(numPrice * lot.weight) : 0;
-
-  // Fair Price Meter (§24): live comparison of the typed quote against the
-  // recent historical range. Neutral wording — never an accusation.
-  const meter = useFairPriceMeter(
-    lot.materialCode,
-    numPrice > 0 ? numPrice : undefined,
-  );
+  // §9/§10: show the collector who submitted the lot — not the signed-in
+  // recycler's own name (the portal previously displayed itself as collector).
+  const collectorName = collector?.name ?? "Collector";
 
   const submit = async (reject: boolean) => {
+    if (!recyclerId) {
+      pushToast("Facility binding still syncing — try again in a moment", "error");
+      return;
+    }
     setBusy(true);
     try {
       await quoteLot({
@@ -306,13 +316,18 @@ function ReviewLot({
             </p>
           )}
           <div className="mt-4 grid gap-2.5 sm:grid-cols-[1fr_auto]">
-            <ClayButton disabled={busy || numPrice <= 0} onClick={() => void submit(false)}>
+            <ClayButton disabled={busy || numPrice <= 0 || !recyclerId} onClick={() => void submit(false)}>
               <ShieldCheckIcon className="size-5" /> Accept &amp; Send Quote
             </ClayButton>
-            <ClayButton variant="danger" disabled={busy} onClick={() => setRejectMode(true)}>
+            <ClayButton variant="danger" disabled={busy || !recyclerId} onClick={() => setRejectMode(true)}>
               <XCircleIcon className="size-5" /> Reject Lot
             </ClayButton>
           </div>
+          {!recyclerId && (
+            <p className="mt-2 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[12.5px] font-semibold text-[var(--pending)]">
+              Facility binding still syncing — quoting is disabled until it lands.
+            </p>
+          )}
         </ClayCard>
       ) : (
         <ClayCard className="rounded-3xl border-l-4 border-[var(--danger)]">

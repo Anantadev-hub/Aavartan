@@ -25,6 +25,16 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
   const sendLot = useMutation(api.lots.sendLot);
   const [confirming, setConfirming] = useState(false);
 
+  // Hooks MUST run before any early return (React rules of hooks): the fair
+  // price meter previously sat below the loading/not-found branches and
+  // crashed the lot screen whenever data resolved.
+  const meterInput = data && data !== null && "lot" in data ? data.lot.materialCode : null;
+  const meterPrice =
+    data && data !== null && "lot" in data && data.lot.quotedPrice && data.lot.quotedPrice > 0
+      ? data.lot.quotedPrice
+      : undefined;
+  const meter = useFairPriceMeter(meterInput ?? "pcb", meterPrice);
+
   if (data === undefined || timeline === undefined) {
     return <LoadingState label={t("common.loading")} />;
   }
@@ -40,12 +50,6 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
   const mat = materials?.find((m) => m.code === lot.materialCode);
   const matName = mat?.name ?? lot.materialCode.toUpperCase();
   const aiPct = aiConfidencePercent(lot.aiConfidence);
-
-  // Fair Price Meter (§24): collector-side transparency when a quote arrives.
-  const meter = useFairPriceMeter(
-    lot.materialCode,
-    lot.quotedPrice && lot.quotedPrice > 0 ? lot.quotedPrice : undefined,
-  );
 
   const isCollectorSide = profile?.role === "collector";
   const canConfirmHandover =
