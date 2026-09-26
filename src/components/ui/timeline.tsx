@@ -18,7 +18,7 @@ export function Timeline({ steps }: { steps: TimelineStep[] }) {
               aria-hidden
               className={cn(
                 "absolute left-[15px] top-8 h-[calc(100%-14px)] w-1 rounded-full",
-                step.state === "done" ? "bg-teal/70" : "bg-border",
+                step.state === "done" ? "bg-teal/70" : "bg-white/10",
               )}
             />
           )}
@@ -28,7 +28,7 @@ export function Timeline({ steps }: { steps: TimelineStep[] }) {
               "relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full text-white",
               step.state === "done" && "bg-[var(--verified)] shadow-[var(--clay-1)]",
               step.state === "pending" && "bg-[var(--pending)] shadow-[var(--clay-1)]",
-              step.state === "todo" && "bg-slate-300 text-slate-500",
+              step.state === "todo" && "bg-[#20242D] text-[#8E95A5]",
             )}
           >
             {step.state === "done" ? (
@@ -38,7 +38,7 @@ export function Timeline({ steps }: { steps: TimelineStep[] }) {
             ) : step.state === "pending" ? (
               <span className="size-2.5 rounded-full bg-white/95" />
             ) : (
-              <span className="size-2 rounded-full bg-slate-400/70" />
+              <span className="size-2 rounded-full bg-white/30" />
             )}
           </span>
           <div className="min-w-0 flex-1 pt-0.5">

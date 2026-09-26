@@ -29,9 +29,9 @@ function ChipToggle({
         "min-h-11 rounded-2xl border-2 px-3.5 text-[13.5px] font-bold clay-pressable",
         selected
           ? tone === "teal"
-            ? "border-teal bg-mint/60 text-teal-deep"
-            : "border-navy bg-mint/60 text-navy"
-          : "border-border bg-white text-muted2",
+            ? "border-teal bg-[#064E3B]/60 text-teal"
+            : "border-teal bg-[#064E3B]/60 text-white"
+          : "border-[#2A2F3D] bg-[#20242D] text-muted2",
       )}
     >
       {children}
@@ -200,7 +200,7 @@ export function RecyclerOnboarding({
         </div>
       </div>
 
-      <div className="clay-sm flex items-start gap-2.5 rounded-2xl bg-mint/50 px-4 py-3">
+      <div className="clay-sm flex items-start gap-2.5 rounded-2xl bg-[#064E3B]/50 px-4 py-3">
         <ShieldCheckIcon className="mt-0.5 size-5 shrink-0 text-[var(--verified)]" />
         <div>
           <p className="text-[13.5px] font-extrabold text-navy">Authorization status</p>

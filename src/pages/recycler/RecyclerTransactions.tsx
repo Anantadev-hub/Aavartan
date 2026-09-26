@@ -49,7 +49,7 @@ export default function RecyclerTransactions({ recyclerId }: { recyclerId: Id<"r
             aria-pressed={filter === f.key}
             className={cn(
               "rounded-xl px-3.5 py-2 text-[12.5px] font-bold clay-pressable",
-              filter === f.key ? "bg-navy text-mint" : "bg-card text-muted2 shadow-[var(--clay-1)]",
+              filter === f.key ? "bg-navy text-teal" : "bg-card text-muted2 shadow-[var(--clay-1)]",
             )}
           >
             {f.label}

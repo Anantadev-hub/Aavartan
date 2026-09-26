@@ -228,7 +228,7 @@ export default function AddFlow({
               </div>
             </div>
             {ai.confidence < 0.7 && (
-              <p className="mt-3 rounded-2xl bg-amber-50 px-3.5 py-2.5 text-[13px] font-semibold text-amber-700">
+              <p className="mt-3 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--pending)]">
                 {t("add.lowConfidence")}
               </p>
             )}
@@ -364,7 +364,7 @@ export default function AddFlow({
           </ClayCard>
 
           {!online && (
-            <p className="flex items-center gap-2 rounded-2xl bg-amber-50 px-3.5 py-2.5 text-[13px] font-semibold text-amber-700">
+            <p className="flex items-center gap-2 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--pending)]">
               <WarningIcon className="size-4 shrink-0" />
               {t("add.offlineNote")}
             </p>

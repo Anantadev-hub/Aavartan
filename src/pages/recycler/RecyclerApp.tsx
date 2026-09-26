@@ -66,7 +66,7 @@ export default function RecyclerApp() {
   return (
     <div className="min-h-dvh bg-background">
       {/* Top header */}
-      <header className="sticky top-0 z-40 border-b border-white/60 bg-background/95 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <span className="clay flex size-10 items-center justify-center text-teal">
             <RecycleIcon className="size-5" />
@@ -102,7 +102,7 @@ export default function RecyclerApp() {
       {/* Bottom nav — recycler */}
       <nav
         aria-label="Recycler primary"
-        className="sticky bottom-0 z-40 border-t border-white/60 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
+        className="sticky bottom-0 z-40 border-t border-white/[0.08] bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
       >
         <div className="mx-auto grid max-w-6xl grid-cols-4 px-2 py-1.5">
           {(

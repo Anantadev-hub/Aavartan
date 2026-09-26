@@ -172,7 +172,7 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
 
           {lot.handoverRef ? (
             <div className="mt-3 space-y-3">
-              <div className="clay-sm flex items-center justify-center rounded-2xl bg-white p-4">
+              <div className="clay-sm flex items-center justify-center rounded-2xl bg-white p-4 ring-1 ring-white/10">
                 <QRCodeSVG
                   value={JSON.stringify({
                     ref: lot.referenceId,
@@ -181,7 +181,7 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
                   })}
                   size={132}
                   bgColor="#ffffff"
-                  fgColor="#0b1f3a"
+                  fgColor="#1A1D24"
                 />
               </div>
               <div className="space-y-1.5 text-[12.5px]">
@@ -192,7 +192,7 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
                 <Row ok label={t("handover.locationRecorded")} value={lot.locationLabel} />
                 <Row ok label="Integrity checksum (demo)" value={lot.handoverHash?.slice(0, 12) ?? "—"} />
               </div>
-              <p className="rounded-2xl bg-mint px-3.5 py-2.5 text-[12px] font-semibold text-teal-deep">
+              <p className="rounded-2xl bg-[#064E3B] px-3.5 py-2.5 text-[12px] font-semibold text-teal">
                 Verified Digital Handover — tamper-evident concept demo (checksum, not cryptographic).
               </p>
             </div>

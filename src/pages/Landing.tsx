@@ -35,7 +35,7 @@ export default function Landing() {
               className={cn(
                 "rounded-xl px-2.5 py-1.5 text-xs font-bold clay-pressable",
                 lang === l
-                  ? "bg-navy text-mint shadow-[var(--clay-1)]"
+                  ? "bg-navy text-teal shadow-[var(--clay-1)]"
                   : "bg-card text-muted2 shadow-[var(--clay-1)]",
               )}
             >
@@ -63,7 +63,7 @@ export default function Landing() {
                 <span className="relative z-10">formal recycling chain</span>
                 <span
                   aria-hidden
-                  className="absolute inset-x-0 bottom-0.5 z-0 h-3.5 -rotate-1 rounded-full bg-mint"
+                  className="absolute inset-x-0 bottom-0.5 z-0 h-3.5 -rotate-1 rounded-full bg-teal/25"
                 />
               </span>
               .
@@ -125,7 +125,7 @@ export default function Landing() {
                       {formatINR(410)}
                       <span className="text-base font-bold text-muted2">/kg</span>
                     </p>
-                    <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-bold text-[var(--verified)]">
+                    <span className="rounded-full bg-[#064E3B] px-2.5 py-1 text-xs font-bold text-[var(--verified)]">
                       +4.2%
                     </span>
                   </div>

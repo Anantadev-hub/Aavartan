@@ -240,7 +240,7 @@ function ReviewLot({
             </div>
           </div>
           {numPrice > 0 && mat && numPrice > mat.currentPrice * 2.5 && (
-            <p className="mt-2 rounded-2xl bg-amber-50 px-3.5 py-2.5 text-[12.5px] font-semibold text-amber-700">
+            <p className="mt-2 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[12.5px] font-semibold text-[var(--pending)]">
               Review recommended: quote is far above the indicative market rate.
             </p>
           )}

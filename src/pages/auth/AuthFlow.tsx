@@ -67,11 +67,11 @@ export function InputField({
       <input
         aria-invalid={!!error}
         className={cn(
-          "mt-1.5 h-13 min-h-[52px] w-full rounded-2xl border bg-white px-4 text-[15.5px] font-medium text-foreground",
-          "transition-colors placeholder:text-slate-400",
+          "mt-1.5 h-13 min-h-[52px] w-full rounded-2xl border bg-[#20242D] px-4 text-[15.5px] font-medium text-foreground",
+          "transition-colors placeholder:text-[#5A6072]",
           error
             ? "border-[var(--danger)] focus:border-[var(--danger)]"
-            : "border-border focus:border-teal focus:ring-2 focus:ring-teal/25",
+            : "border-[#2A2F3D] focus:border-teal focus:ring-2 focus:ring-teal/25",
           "focus:outline-none",
           className,
         )}
@@ -105,13 +105,13 @@ export function MobileNumberInput({
       </span>
       <div
         className={cn(
-          "mt-1.5 flex h-13 min-h-[52px] items-stretch overflow-hidden rounded-2xl border bg-white transition-colors",
-          error ? "border-[var(--danger)]" : "border-border focus-within:border-teal focus-within:ring-2 focus-within:ring-teal/25",
+          "mt-1.5 flex h-13 min-h-[52px] items-stretch overflow-hidden rounded-2xl border bg-[#20242D] transition-colors",
+          error ? "border-[var(--danger)]" : "border-[#2A2F3D] focus-within:border-teal focus-within:ring-2 focus-within:ring-teal/25",
         )}
       >
         <span
           aria-hidden
-          className="flex items-center border-r border-border bg-muted px-3.5 text-[15px] font-bold text-navy"
+          className="flex items-center border-r border-[#2A2F3D] bg-[#1A1D24] px-3.5 text-[15px] font-bold text-navy"
         >
           +91
         </span>
@@ -125,7 +125,7 @@ export function MobileNumberInput({
           placeholder="Enter 10-digit mobile number"
           aria-label="Mobile number"
           aria-invalid={!!error}
-          className="min-w-0 flex-1 bg-transparent px-3.5 text-[16px] font-semibold tracking-wide text-foreground placeholder:text-[13.5px] placeholder:font-medium placeholder:text-slate-400 focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent px-3.5 text-[16px] font-semibold tracking-wide text-foreground placeholder:text-[13.5px] placeholder:font-medium placeholder:text-[#5A6072] focus:outline-none"
         />
       </div>
       {error && (
@@ -209,10 +209,10 @@ export function OtpBoxes({
                 "aspect-square w-full rounded-2xl border text-center text-[22px] font-extrabold text-navy transition-colors",
                 "disabled:opacity-50",
                 error
-                  ? "border-[var(--danger)] bg-red-50/40"
+                  ? "border-[var(--danger)] bg-[#451A03]/40"
                   : digit
-                    ? "border-teal bg-mint/50"
-                    : "border-border bg-white focus:border-teal focus:ring-2 focus:ring-teal/25 focus:outline-none",
+                    ? "border-teal bg-[#064E3B]/50"
+                    : "border-[#2A2F3D] bg-[#20242D] focus:border-teal focus:ring-2 focus:ring-teal/25 focus:outline-none",
               )}
             />
           );
@@ -250,10 +250,10 @@ export function RoleCard({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "w-full rounded-3xl border-2 bg-white p-4 text-left transition-all clay-pressable",
+        "w-full rounded-3xl border-2 bg-[#1A1D24] p-4 text-left transition-all clay-pressable",
         selected
-          ? "border-navy bg-mint/60 shadow-[var(--clay-1)]"
-          : "border-border hover:border-slate-300",
+          ? "border-teal bg-[#064E3B]/60 shadow-[var(--clay-1)]"
+          : "border-[#2A2F3D] hover:border-white/25",
       )}
     >
       <div className="flex items-start gap-3.5">
@@ -261,7 +261,7 @@ export function RoleCard({
           aria-hidden
           className={cn(
             "flex size-12 shrink-0 items-center justify-center rounded-2xl text-[22px]",
-            selected ? "bg-teal text-white" : "bg-muted",
+            selected ? "bg-teal text-white" : "bg-[#20242D]",
           )}
         >
           {emoji}
@@ -279,7 +279,7 @@ export function RoleCard({
           aria-hidden
           className={cn(
             "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-            selected ? "border-teal bg-teal text-white" : "border-slate-300 bg-white",
+            selected ? "border-teal bg-teal text-white" : "border-white/25 bg-transparent",
           )}
         >
           {selected && <CheckIcon className="size-3.5" strokeWidth={3.4} />}
@@ -300,7 +300,7 @@ export function ProgressIndicator({ step, total }: { step: number; total: number
           aria-hidden
           className={cn(
             "h-1.5 rounded-full transition-all",
-            i < step ? "w-6 bg-teal" : i === step ? "w-6 bg-teal/40" : "w-3 bg-border",
+            i < step ? "w-6 bg-teal" : i === step ? "w-6 bg-teal/40" : "w-3 bg-white/10",
           )}
         />
       ))}
@@ -381,7 +381,7 @@ export function StepFade({ children, k }: { children: React.ReactNode; k: string
 export function OfflineNote({ offline }: { offline: boolean }) {
   if (!offline) return null;
   return (
-    <p className="flex items-center justify-center gap-1.5 rounded-2xl bg-amber-50 px-3.5 py-2.5 text-[12.5px] font-semibold text-amber-700">
+    <p className="flex items-center justify-center gap-1.5 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[12.5px] font-semibold text-[var(--pending)]">
       <span aria-hidden className="size-2 rounded-full bg-[var(--pending)]" />
       You're offline. Some features may be unavailable.
     </p>
@@ -391,7 +391,7 @@ export function OfflineNote({ offline }: { offline: boolean }) {
 export function ErrorNote({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p role="alert" className="rounded-2xl bg-red-50 px-3.5 py-2.5 text-[12.5px] font-semibold text-[var(--danger)]">
+    <p role="alert" className="rounded-2xl bg-[#7F1D1D]/40 px-3.5 py-2.5 text-[12.5px] font-semibold text-[var(--danger)]">
       {message}
     </p>
   );

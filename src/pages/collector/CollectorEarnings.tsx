@@ -26,8 +26,8 @@ export default function CollectorEarnings() {
       <h1 className="text-[26px] font-extrabold tracking-tight text-navy">{t("earnings.title")}</h1>
 
       {/* Summary */}
-      <ClayCard className="rounded-3xl bg-navy text-mint" style={undefined}>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-mint/70">{t("earnings.total")}</p>
+      <ClayCard className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,#064E3B_0%,#047857_50%,#10B981_100%)] text-white">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-white/70">{t("earnings.total")}</p>
         <p className="mt-1 text-4xl font-extrabold">
           {formatINR(summary.totalEarnings)}
         </p>
@@ -39,7 +39,7 @@ export default function CollectorEarnings() {
           ].map((s) => (
             <div key={s.l} className="rounded-2xl bg-white/10 px-2.5 py-2.5 text-center">
               <p className="text-[15px] font-extrabold">{s.v}</p>
-              <p className="mt-0.5 text-[10px] font-semibold leading-tight text-mint/75">{s.l}</p>
+              <p className="mt-0.5 text-[10px] font-semibold leading-tight text-white/75">{s.l}</p>
             </div
             >
           ))}

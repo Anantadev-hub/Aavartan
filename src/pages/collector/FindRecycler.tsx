@@ -133,7 +133,7 @@ export default function FindRecycler({
               aria-pressed={sort === f.key}
               className={cn(
                 "shrink-0 rounded-xl px-3 py-2 text-[12px] font-bold clay-pressable",
-                sort === f.key ? "bg-navy text-mint" : "bg-card text-muted2 shadow-[var(--clay-1)]",
+                sort === f.key ? "bg-navy text-teal" : "bg-card text-muted2 shadow-[var(--clay-1)]",
               )}
             >
               {f.label}

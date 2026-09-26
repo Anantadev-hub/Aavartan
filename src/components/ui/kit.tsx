@@ -22,7 +22,7 @@ const buttonVariants = cva(
           "bg-card text-foreground rounded-2xl shadow-[var(--clay-1)] hover:brightness-[1.02]",
         ghost:
           "bg-transparent text-foreground rounded-2xl hover:bg-muted shadow-none active:bg-muted",
-        danger: "bg-card text-[var(--danger)] rounded-2xl shadow-[var(--clay-1)] hover:bg-red-50",
+        danger: "bg-card text-[var(--danger)] rounded-2xl shadow-[var(--clay-1)] hover:bg-[#7F1D1D]/25",
       },
       size: {
         sm: "h-10 px-4 text-sm rounded-xl",
@@ -94,13 +94,13 @@ export function ClayBadge({
 }) {
   const tones: Record<string, string> = {
     neutral: "bg-muted text-muted-foreground",
-    teal: "bg-mint text-teal-deep",
-    gold: "bg-amber-50 text-amber-700",
-    green: "bg-green-50 text-[var(--verified)]",
-    amber: "bg-amber-50 text-[var(--pending)]",
-    red: "bg-red-50 text-[var(--danger)]",
-    blue: "bg-blue-50 text-[var(--info)]",
-    navy: "bg-navy text-mint",
+    teal: "bg-[#064E3B] text-[var(--teal)]",
+    gold: "bg-[#451A03] text-[var(--gold)]",
+    green: "bg-[#064E3B] text-[var(--verified)]",
+    amber: "bg-[#451A03] text-[var(--pending)]",
+    red: "bg-[#7F1D1D]/40 text-[var(--danger)]",
+    blue: "bg-[#1E3A8A] text-[var(--info)]",
+    navy: "bg-navy text-teal",
   };
   return (
     <span

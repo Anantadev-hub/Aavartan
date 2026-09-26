@@ -229,7 +229,7 @@ export default function LoginScreen() {
               </div>
 
               {/* Demo mode — subtle */}
-              <details className="mt-6 rounded-2xl border border-border bg-white px-4 py-3">
+              <details className="mt-6 rounded-2xl border border-[#2A2F3D] bg-[#1A1D24] px-4 py-3">
                 <summary className="cursor-pointer list-none text-[11.5px] font-bold uppercase tracking-wider text-muted2">
                   Demo Mode
                 </summary>
@@ -252,7 +252,7 @@ export default function LoginScreen() {
                 </div>
                 <p className="mt-2.5 text-[11px] text-muted2">
                   Demo OTP for the manual flow:{" "}
-                  <span className="font-extrabold text-navy">{DEMO_OTP}</span>
+                  <span className="font-extrabold text-teal">{DEMO_OTP}</span>
                 </p>
               </details>
 
