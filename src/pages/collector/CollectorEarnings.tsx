@@ -1,16 +1,26 @@
-import { WalletIcon, ChevronRightIcon, SparkleIcon } from "@/components/icons";
-import { EmptyState, LoadingState, ClayCard, ClaySection, StatusPill, ClayButton } from "@/components/ui/kit";
-import { useAppState, pushToast } from "@/lib/app-state";
-import { speak } from "@/lib/app-state";
+import { WalletIcon, ChevronRightIcon, SparkleIcon, LogOutIcon, ShieldCheckIcon, MapPinIcon } from "@/components/icons";
+import { EmptyState, LoadingState, ClayCard, ClaySection, StatusPill, ClayButton, ClayBadge } from "@/components/ui/kit";
+import { useAppState, pushToast, speak } from "@/lib/app-state";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { LANG_LABELS } from "@/lib/i18n";
+import { clearPendingProfile, clearLastAuth } from "@/lib/auth-service";
 import { formatINR, formatDate, formatKg } from "@/lib/format";
-import { useEarnings, useMaterials, useMyLots, useProfile, useEarningsSimulator, useEarningsLedger } from "@/hooks/use-kc-data";
+import {
+  useEarnings, useMaterials, useMyLots, useProfile, useEarningsSimulator,
+  useEarningsLedger, useWeeklyReport, type AppProfile,
+} from "@/hooks/use-kc-data";
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
 
 export default function CollectorEarnings() {
   const { t, lang } = useAppState();
-  const profile = useProfile();
-  const { summary, monthly } = useEarnings(profile?._id);
+  const navigate = useNavigate();
+  const { signOut } = useAuthActions();
+  const profile = useProfile() as AppProfile | null | undefined;
+  const { summary, monthly } = useEarnings(
+    profile && "_id" in profile ? profile._id : undefined,
+  );
   const lots = useMyLots(profile?._id);
   const { materials } = useMaterials();
 
@@ -18,6 +28,8 @@ export default function CollectorEarnings() {
   const [simWeight, setSimWeight] = useState(10);
   const sim = useEarningsSimulator(simWeight);
   const ledger = useEarningsLedger(profile?._id);
+  // §11/§12 weekly net earnings report (completed + PAID lots only).
+  const weekly = useWeeklyReport(profile?._id);
 
   if (summary === undefined || lots === undefined) {
     return <LoadingState label={t("common.loading")} />;
@@ -32,6 +44,58 @@ export default function CollectorEarnings() {
   return (
     <div className="space-y-5 px-4 pt-4">
       <h1 className="text-[26px] font-extrabold tracking-tight text-navy">{t("earnings.title")}</h1>
+
+      {/* §1/§4 Account card — cloud-persistent profile details + Logout. */}
+      <ClayCard className="rounded-3xl">
+        <div className="flex items-start gap-3">
+          <span className="clay-sm flex size-11 shrink-0 items-center justify-center text-teal">
+            <ShieldCheckIcon className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[16px] font-extrabold text-navy">{profile?.name ?? "—"}</p>
+            <p className="mt-0.5 truncate text-[12.5px] text-muted2">{profile?.phone ?? ""}</p>
+          </div>
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          <ClayBadge tone="teal">{profile?.role === "collector" ? "Collector" : (profile?.role ?? "—")}</ClayBadge>
+          {(() => {
+            const p = profile as AppProfile | null | undefined;
+            if (!p) return null;
+            const area = "collectionArea" in p ? (p as { collectionArea?: string }).collectionArea : undefined;
+            const language = "preferredLanguage" in p ? (p as { preferredLanguage?: "en" | "hi" | "mr" }).preferredLanguage : undefined;
+            return (
+              <>
+                {area && (
+                  <ClayBadge tone="neutral">
+                    <MapPinIcon className="size-3" /> {area}
+                  </ClayBadge>
+                )}
+                {language && <ClayBadge tone="neutral">{LANG_LABELS[language]}</ClayBadge>}
+              </>
+            );
+          })()}
+        </div>
+        <ClayButton
+          variant="surface"
+          className="mt-3 w-full"
+          onClick={() => {
+            // §1: clear the session, return to login. Account + data stay in
+            // the cloud; the phone number re-links the account on next login.
+            void (async () => {
+              try {
+                await signOut();
+              } catch {
+                /* session already gone */
+              }
+              clearPendingProfile();
+              clearLastAuth();
+              navigate("/auth", { replace: true });
+            })();
+          }}
+        >
+          <LogOutIcon className="size-5" /> Logout
+        </ClayButton>
+      </ClayCard>
 
       {/* Summary */}
       <ClayCard className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,#064E3B_0%,#047857_50%,#10B981_100%)] text-white">
@@ -53,6 +117,71 @@ export default function CollectorEarnings() {
           ))}
         </div>
       </ClayCard>
+
+      {/* §11/§12 Weekly Report — completed + PAID sales only. */}
+      <ClaySection title="Weekly Report">
+        <ClayCard className="rounded-3xl">
+          {weekly ? (
+            <>
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted2">Net earnings this week</p>
+                  <p className="mt-0.5 text-3xl font-extrabold text-navy">{formatINR(weekly.net)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted2">Previous week</p>
+                  <p className="text-[15px] font-extrabold text-muted2">{formatINR(weekly.prevGross)}</p>
+                  <p
+                    className={cn(
+                      "mt-0.5 text-[12.5px] font-extrabold",
+                      weekly.change > 0
+                        ? "text-[var(--verified)]"
+                        : weekly.change < 0
+                          ? "text-[var(--danger)]"
+                          : "text-muted2",
+                    )}
+                  >
+                    {weekly.change > 0 ? "+" : ""}{formatINR(weekly.change)}
+                    {weekly.changePct != null ? ` (${weekly.change > 0 ? "+" : ""}${weekly.changePct}%)` : ""}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {[
+                  { l: "Completed sales", v: String(weekly.completedSales) },
+                  { l: "Material sold", v: formatKg(weekly.materialSoldKg) },
+                  { l: "Avg per sale", v: formatINR(weekly.avgSale) },
+                ].map((s) => (
+                  <div key={s.l} className="clay-sm rounded-2xl px-2 py-2.5 text-center">
+                    <p className="text-[15px] font-extrabold text-navy">{s.v}</p>
+                    <p className="mt-0.5 text-[9.5px] font-semibold leading-tight text-muted2">{s.l}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Trend visualization — per-day earnings this week. */}
+              <div className="mt-3 flex h-16 items-end gap-1.5">
+                {weekly.daily.map((d) => {
+                  const max = Math.max(1, ...weekly.daily.map((x) => x.amount));
+                  return (
+                    <div key={d.day} className="flex flex-1 flex-col items-center gap-1">
+                      <div
+                        className={cn("w-full rounded-t-lg", d.amount > 0 ? "bg-teal/75" : "bg-muted")}
+                        style={{ height: `${Math.max(6, (d.amount / max) * 44)}px` }}
+                      />
+                      <span className="text-[8.5px] font-semibold text-muted2">{d.day}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[11px] text-muted2">{weekly.note}</p>
+            </>
+          ) : (
+            <p className="text-sm text-muted2">Loading weekly report…</p>
+          )}
+        </ClayCard>
+      </ClaySection>
 
       {/* Sell Smarter (§33) — clearly labelled estimate */}
       <ClaySection title="Sell Smarter">

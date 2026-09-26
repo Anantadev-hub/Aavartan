@@ -101,13 +101,15 @@ const schema = defineSchema(
       userId: v.id("users"),
       role: v.union(v.literal("collector"), v.literal("recycler"), v.literal("admin")),
       name: v.string(),
-      phone: v.optional(v.string()), // demo placeholder
+      phone: v.optional(v.string()), // normalized 10-digit when from onboarding
       preferredLanguage: v.optional(v.union(v.literal("en"), v.literal("hi"), v.literal("mr"))),
       collectionArea: v.optional(v.string()),
       recyclerId: v.optional(v.id("recyclers")), // for recycler-role users
       createdAt: v.number(),
       updatedAt: v.optional(v.number()),
-    }).index("by_user", ["userId"]),
+    })
+      .index("by_user", ["userId"])
+      .index("by_phone", ["phone"]),
 
     // Material catalogue (§5) with live indicative rates.
     materials: defineTable({
@@ -169,6 +171,8 @@ const schema = defineSchema(
 
     // A collected e-waste lot (§6). Full transactional record incl. quote,
     // handover and payment fields. referenceId format KC-2026-XXXXXX.
+    // Price snapshot: valuation is frozen at creation — later market moves
+    // NEVER rewrite a historical lot (see lots.createLot + dailyPrices).
     lots: defineTable({
       referenceId: v.string(), // KC-2026-000001
       collectorId: v.id("profiles"),
@@ -179,12 +183,16 @@ const schema = defineSchema(
       pieces: v.optional(v.number()),
       notes: v.optional(v.string()),
       source: v.optional(v.string()),
+      imageId: v.optional(v.id("images")), // §5 unique image record
       photoDataUrl: v.optional(v.string()), // demo: inline jpeg; prod: object storage
       aiMaterialCode: v.optional(v.string()), // final material after user confirmation
       aiDetectedClass: v.optional(v.string()), // raw model class (e.g. PCB)
-      aiConfidence: v.optional(v.number()), // 0..1 fraction
+      aiConfidence: v.optional(v.number()), // 0-100 integer (UI contract)
       aiSource: v.optional(v.union(v.literal("roboflow"), v.literal("demo"))),
-      estimatedValue: v.number(),
+      estimatedValue: v.number(), // frozen: weight × price_at_creation
+      pricePerKgAtCreation: v.optional(v.number()), // §9 exact rate used
+      priceRecordId: v.optional(v.id("dailyPrices")), // §9 which price row
+      priceTimestamp: v.optional(v.number()), // §9 when that rate was recorded
       quotedPrice: v.optional(v.number()), // ₹/kg quoted by recycler
       quotedAt: v.optional(v.number()),
       finalSaleValue: v.optional(v.number()),
@@ -272,6 +280,37 @@ const schema = defineSchema(
       .index("by_client_ref", ["clientRef"])
       .index("by_user", ["userId"])
       .index("by_status", ["syncStatus"]),
+
+    // §5 persistent image records — every capture gets a globally unique ID
+    // (IMG-KC-2026-XXXXXX) stored in the database, never only in memory.
+    // photoDataUrl keeps the compressed JPEG inline (demo object storage);
+    // a production build swaps the string for a storage URL/reference.
+    images: defineTable({
+      imageRef: v.string(), // IMG-KC-2026-000001
+      uploaderId: v.id("profiles"),
+      lotId: v.optional(v.id("lots")), // set when attached to a lot
+      storageUrl: v.optional(v.string()), // object-storage reference (demo: data URL)
+      photoDataUrl: v.optional(v.string()),
+      aiDetectedClass: v.optional(v.string()),
+      aiConfidence: v.optional(v.number()), // 0-100 integer
+      aiSource: v.optional(v.union(v.literal("roboflow"), v.literal("demo"))),
+      uploadTimestamp: v.number(),
+    })
+      .index("by_ref", ["imageRef"])
+      .index("by_lot", ["lotId"])
+      .index("by_uploader", ["uploaderId"]),
+
+    // §8 daily price snapshots — the valuation source of truth. Each row is
+    // the recorded rate for a material on a day; lots freeze whichever row
+    // they were created against (§9). Source is always labelled demo.
+    dailyPrices: defineTable({
+      materialCode: v.string(),
+      day: v.string(), // YYYY-MM-DD (IST-independent UTC day key)
+      pricePerKg: v.number(),
+      source: v.string(), // "demo" / "manual" — never claimed as live market
+      recordedAt: v.number(),
+    })      .index("by_material_day", ["materialCode", "day"])
+      .index("by_material", ["materialCode"]),
 
     // Rules-based anomaly flags attached to lots (§34; "Review recommended",
     // never an accusation, never a trained ML claim).

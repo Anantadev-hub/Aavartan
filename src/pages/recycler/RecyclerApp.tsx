@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -9,6 +10,7 @@ import {
 } from "@/components/icons";
 import { ClayButton, ClayCard, ClayBadge, LoadingState, OfflineBanner, Toasts, SyncIndicator } from "@/components/ui/kit";
 import { useAppState, setOnline } from "@/lib/app-state";
+import { clearPendingProfile, clearLastAuth } from "@/lib/auth-service";
 import {
   useProfile, useRecyclerStats, useAvailableLots, useMaterials, useFacility,
   useCollectionAreasHeatmap, usePurchasesSummary, isLocalProfile, useRecyclerBindingRepair,
@@ -32,6 +34,7 @@ function Redirect({ to }: { to: string }) {
 export default function RecyclerApp() {
   const { t } = useAppState();
   const navigate = useNavigate();
+  const { signOut } = useAuthActions();
   const profile = useProfile();
   const [tab, setTab] = useState<Tab>("home");
 
@@ -95,8 +98,21 @@ export default function RecyclerApp() {
           </div>
           <SyncIndicator />
           <button
-            onClick={() => navigate("/", { replace: true })}
-            aria-label="Exit portal"
+            onClick={() => {
+              // §1: clear the session and return to login; the facility and
+              // all transaction data remain in the cloud.
+              void (async () => {
+                try {
+                  await signOut();
+                } catch {
+                  /* session already gone */
+                }
+                clearPendingProfile();
+                clearLastAuth();
+                navigate("/auth", { replace: true });
+              })();
+            }}
+            aria-label="Logout"
             className="clay-sm flex size-10 items-center justify-center text-muted2 clay-pressable"
           >
             <LogOutIcon className="size-5" />

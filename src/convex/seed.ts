@@ -94,6 +94,16 @@ async function insertBaseData(ctx: MutationCtx) {
       category: m.category, description: m.description, unit: "kg",
       currentPrice: m.price, prevPrice: m.prev, updatedAt: now, sort: m.sort,
     });
+    // §8: seed TODAY's daily price snapshot so every new lot freezes a real
+    // price record (source-labelled demo, per the no-live-market-data rule).
+    const day = new Date(now).toISOString().slice(0, 10);
+    await ctx.db.insert("dailyPrices", {
+      materialCode: m.code,
+      day,
+      pricePerKg: m.price,
+      source: "demo",
+      recordedAt: now,
+    });
     // 90 days of demo price history: gentle random walk ending at current price.
     // source marker keeps the demo nature explicit (§7).
     const rand = mulberry32(m.code.length * 7919 + m.sort);
@@ -330,6 +340,25 @@ export const seedIfEmpty = mutation({
       for (const a of DEMO_AREAS_DENSITY) {
         if (!have.has(a.area)) {
           await ctx.db.insert("collectionAreas", { ...a, city: "New Delhi" });
+        }
+      }
+      // Backfill §8 daily snapshots for deployments created before they
+      // existed — every NEW lot must be able to freeze a real price record.
+      const today = new Date().toISOString().slice(0, 10);
+      const mats = await ctx.db.query("materials").collect();
+      for (const m of mats) {
+        const existing = await ctx.db
+          .query("dailyPrices")
+          .withIndex("by_material_day", (q) => q.eq("materialCode", m.code).eq("day", today))
+          .unique();
+        if (!existing) {
+          await ctx.db.insert("dailyPrices", {
+            materialCode: m.code,
+            day: today,
+            pricePerKg: m.currentPrice,
+            source: "demo",
+            recordedAt: Date.now(),
+          });
         }
       }
       // Top up the demo activity pipeline if absent.

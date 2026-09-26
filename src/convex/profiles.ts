@@ -43,7 +43,40 @@ export const createProfile = mutation({
       .query("profiles")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .unique();
-    if (existing) return existing;
+    if (existing) {
+      // Cloud-persistent onboarding (§4): refresh/re-login must refresh the
+      // entered details onto the SAME account, never create a duplicate.
+      await ctx.db.patch(existing._id, {
+        name: name.trim() || existing.name,
+        phone: phone && phone.trim() !== "" ? phone : existing.phone,
+        preferredLanguage: preferredLanguage ?? existing.preferredLanguage,
+        collectionArea: collectionArea ?? existing.collectionArea,
+        updatedAt: Date.now(),
+      });
+      return (await ctx.db.get(existing._id))!;
+    }
+
+    // §2 account dedupe: a returning user logging in from a fresh session
+    // (new anonymous user id) must rebind to their EXISTING account by phone
+    // instead of creating a second profile.
+    const normalizedPhone = phone && /^[6-9]\d{9}$/.test(phone.trim()) ? phone.trim() : undefined;
+    if (normalizedPhone) {
+      const byPhone = await ctx.db
+        .query("profiles")
+        .withIndex("by_phone", (q) => q.eq("phone", normalizedPhone))
+        .collect();
+      const prior = byPhone.find((p) => p.role === role);
+      if (prior) {
+        await ctx.db.patch(prior._id, {
+          userId, // rebind to the current session's user row
+          name: name.trim() || prior.name,
+          preferredLanguage: preferredLanguage ?? prior.preferredLanguage,
+          collectionArea: collectionArea ?? prior.collectionArea,
+          updatedAt: Date.now(),
+        });
+        return (await ctx.db.get(prior._id))!;
+      }
+    }
 
     let recyclerId: Id<"recyclers"> | undefined;
     if (role === "recycler") {

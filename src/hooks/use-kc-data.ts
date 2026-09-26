@@ -325,6 +325,54 @@ export function useSendSync() {
   return useMutation(api.sync.syncQueue);
 }
 
+// ---- §5/§6/§8/§9/§11 image IDs, price snapshots, weekly report hooks -------
+
+/** Register an uploaded image and get its persistent IMG-KC-2026-XXXXXX ref. */
+export function useRegisterImage() {
+  return useMutation(api.images.registerImage);
+}
+
+/** Latest applicable daily price snapshot for a material (§8). */
+export function useLatestDailyPrice(materialCode: string | undefined) {
+  const live = useQuery(
+    api.materials.latestDailyPrice,
+    materialCode ? { materialCode } : "skip",
+  );
+  const key = `dailyPrice.${materialCode ?? "x"}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined
+    ? live
+    : cachedOrUndefined<{ _id: string; materialCode: string; day: string; pricePerKg: number; source: string; recordedAt: number }>(key);
+}
+
+/** §11 weekly net earnings report (completed + paid lots only). */
+export function useWeeklyReport(collectorId: Id<"profiles"> | undefined) {
+  const live = useQuery(api.lots.weeklyReport, collectorId ? { collectorId } : "skip");
+  const key = `weekly.${collectorId ?? "none"}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined
+    ? live
+    : cachedOrUndefined<{
+        weekStart: number;
+        weekEnd: number;
+        gross: number;
+        net: number;
+        completedSales: number;
+        materialSoldKg: number;
+        avgSale: number;
+        prevGross: number;
+        prevCompletedSales: number;
+        change: number;
+        changePct: number | null;
+        daily: Array<{ day: string; amount: number }>;
+        note: string;
+      }>(key);
+}
+
 // ---- Spec §24/§32/§33/§35/§40 insight hooks (same offline-cache pattern) ----
 
 type FairMeter = {

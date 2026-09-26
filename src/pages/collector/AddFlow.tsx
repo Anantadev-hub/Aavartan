@@ -8,7 +8,7 @@ import {
 import { ClayButton, ClayCard, ClayBadge, Field, ClayInput } from "@/components/ui/kit";
 import { useAppState, pushToast, enqueueDraft } from "@/lib/app-state";
 import { fileToCompressedDataUrl, formatINR } from "@/lib/format";
-import { useMaterials, useProfile } from "@/hooks/use-kc-data";
+import { useMaterials, useProfile, useRegisterImage } from "@/hooks/use-kc-data";
 import { cn } from "@/lib/utils";
 
 type Step = "capture" | "analyzing" | "result" | "details";
@@ -46,6 +46,7 @@ export default function AddFlow({
 
   const createLotFn = useMutation(api.lots.createLot);
   const classifyAction = useAction(api.ai.classifyMaterial);
+  const registerImage = useRegisterImage();
 
   const [step, setStep] = useState<Step>("capture");
   const [photo, setPhoto] = useState<string | null>(null);
@@ -100,6 +101,23 @@ export default function AddFlow({
     setSubmitting(true);
     try {
       if (online && !isLocalProfile) {
+        // §5: persist the image FIRST so it owns a durable server-side ID
+        // (IMG-KC-2026-XXXXXX) even if lot creation were to fail.
+        let imageId: Id<"images"> | undefined;
+        if (photo) {
+          try {
+            const img = await registerImage({
+              uploaderId: profile._id,
+              photoDataUrl: photo,
+              aiDetectedClass: ai?.detectedClass ?? undefined,
+              aiConfidence: ai ? Math.round(ai.confidence * 100) : undefined,
+              aiSource: ai?.source,
+            });
+            imageId = img.imageId;
+          } catch {
+            // Image record is best-effort: lot creation continues without it.
+          }
+        }
         const res = await createLotFn({
           collectorId: profile._id,
           materialCode: material,
@@ -108,6 +126,7 @@ export default function AddFlow({
           pieces: pieces ? Number(pieces) : undefined,
           notes: source || undefined,
           photoDataUrl: photo ?? undefined,
+          imageId,
           aiMaterialCode: ai?.materialCode ?? undefined,
           aiDetectedClass: ai?.detectedClass ?? undefined,
           aiConfidence: ai ? Math.round(ai.confidence * 100) : undefined,

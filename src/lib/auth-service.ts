@@ -159,3 +159,12 @@ export function clearPendingProfile() {
     /* private mode */
   }
 }
+
+/** §1 Logout: forget the "Continue offline" hint (account data stays in the cloud). */
+export function clearLastAuth() {
+  try {
+    localStorage.removeItem(LAST_AUTH_KEY);
+  } catch {
+    /* private mode */
+  }
+}

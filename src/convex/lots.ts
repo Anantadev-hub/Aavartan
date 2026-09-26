@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { type Doc, type Id } from "./_generated/dataModel";
-import { type MutationCtx, mutation, query } from "./_generated/server";
+import { type MutationCtx, type QueryCtx, mutation, query } from "./_generated/server";
 import { conditionValidator, lotStatusValidator, paymentMethodValidator } from "./schema";
 
 // ---------------------------------------------------------------------------
@@ -10,6 +10,11 @@ import { conditionValidator, lotStatusValidator, paymentMethodValidator } from "
 
 const pad2 = (n: number) => n.toString().padStart(2, "0");
 const pad4 = (n: number) => n.toString().padStart(4, "0");
+
+/** UTC YYYY-MM-DD day key — matches dailyPrices.day and week keys. */
+function utcDayKey(ts = Date.now()): string {
+  return new Date(ts).toISOString().slice(0, 10);
+}
 
 // Reference IDs continue from the highest existing number.
 async function nextReferenceId(ctx: MutationCtx): Promise<string> {
@@ -151,10 +156,33 @@ export const estimateValue = query({
       .withIndex("by_code", (q) => q.eq("code", materialCode))
       .unique();
     if (!m) return null;
-    const rate = m.currentPrice * (CONDITION_MULTIPLIER[condition] ?? 1);
-    return { ratePerKg: Math.round(rate), estimatedValue: Math.round(weight * rate) };
+    // §8: the live estimate preview uses the LATEST applicable daily snapshot
+    // (falling back to the material's board rate before the first snapshot).
+    const snap = await latestRate(ctx, materialCode);
+    const rate = (snap?.pricePerKg ?? m.currentPrice) * (CONDITION_MULTIPLIER[condition] ?? 1);
+    return {
+      ratePerKg: Math.round(rate),
+      estimatedValue: Math.round(weight * rate),
+      priceDay: snap?.day ?? null,
+      priceSource: snap?.source ?? "board-default (demo)",
+    };
   },
 });
+
+/** Latest applicable daily snapshot for a material (today first, else most recent). */
+async function latestRate(
+  ctx: { db: QueryCtx["db"] | MutationCtx["db"] },
+  materialCode: string,
+): Promise<{ _id: import("./_generated/dataModel").Id<"dailyPrices">; day: string; pricePerKg: number; source: string; recordedAt: number } | null> {
+  const rows = await ctx.db
+    .query("dailyPrices")
+    .withIndex("by_material", (q) => q.eq("materialCode", materialCode))
+    .collect();
+  if (rows.length === 0) return null;
+  rows.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.recordedAt - a.recordedAt));
+  const s = rows[0];
+  return { _id: s._id, day: s.day, pricePerKg: s.pricePerKg, source: s.source, recordedAt: s.recordedAt };
+}
 
 export const createLot = mutation({
   args: {
@@ -167,6 +195,7 @@ export const createLot = mutation({
     notes: v.optional(v.string()),
     source: v.optional(v.string()),
     photoDataUrl: v.optional(v.string()),
+    imageId: v.optional(v.id("images")), // §5 persisted image record
     aiMaterialCode: v.optional(v.string()),
     aiDetectedClass: v.optional(v.string()),
     aiConfidence: v.optional(v.number()), // stored as 0-100 integer (UI contract)
@@ -184,7 +213,13 @@ export const createLot = mutation({
       .withIndex("by_code", (q) => q.eq("code", args.materialCode))
       .unique();
     if (!m) throw new Error("Unknown material");
-    const rate = m.currentPrice * (CONDITION_MULTIPLIER[args.condition] ?? 1);
+    // ---- §8/§9 price snapshot -------------------------------------------
+    // NEW lots always value against the LATEST applicable daily snapshot
+    // (today's row, else most recent earlier day). The exact row is frozen
+    // onto the lot — later market moves never rewrite this valuation (§9).
+    const snap = await latestRate(ctx, args.materialCode);
+    const baseRate = snap?.pricePerKg ?? m.currentPrice;
+    const rate = baseRate * (CONDITION_MULTIPLIER[args.condition] ?? 1);
     const estimatedValue = Math.round(args.weight * rate);
     const referenceId = await nextReferenceId(ctx);
     // Normalize AI confidence to the UI contract (0-100 integer) regardless of
@@ -205,12 +240,16 @@ export const createLot = mutation({
       pieces: args.pieces,
       notes: args.notes,
       source: args.source,
+      imageId: args.imageId,
       photoDataUrl: args.photoDataUrl,
       aiMaterialCode: args.aiMaterialCode,
       aiDetectedClass: args.aiDetectedClass,
       aiConfidence: aiConfidenceNormalized,
       aiSource: args.aiSource,
       estimatedValue,
+      pricePerKgAtCreation: Math.round(baseRate * 10) / 10,
+      priceRecordId: snap?._id,
+      priceTimestamp: snap?.recordedAt,
       locationLabel: args.locationLabel,
       lat: args.lat,
       lng: args.lng,
@@ -226,7 +265,7 @@ export const createLot = mutation({
       estimatedValue,
       condition: args.condition,
     });
-    return { lotId, referenceId, estimatedValue };
+    return { lotId, referenceId, estimatedValue, pricePerKg: Math.round(rate), priceDay: snap?.day ?? null };
   },
 });
 
@@ -584,6 +623,69 @@ export const monthlyEarnings = query({
       byMonth.set(key, (byMonth.get(key) ?? 0) + (r.finalSaleValue ?? 0));
     }
     return [...byMonth.entries()].sort().map(([month, amount]) => ({ month, amount }));
+  },
+});
+
+// ---- §11/§12 Weekly net earnings report -------------------------------------
+// COMPLETED + PAID lots only. The app tracks no expenses, so net = gross
+// completed sales (stated honestly — nothing invented). Includes the previous
+// week for the comparison row and a per-day series for the trend bars.
+export const weeklyReport = query({
+  args: { collectorId: v.id("profiles") },
+  handler: async (ctx, { collectorId }) => {
+    const rows = await ctx.db
+      .query("lots")
+      .withIndex("by_collector", (q) => q.eq("collectorId", collectorId))
+      .collect();
+
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setUTCHours(0, 0, 0, 0);
+    const DAY = 86_400_000;
+    const startOfThisWeek = startOfToday.getTime() - 6 * DAY;
+    const startOfPrevWeek = startOfThisWeek - 7 * DAY;
+
+    const inRange = (r: Doc<"lots">, from: number, to: number) =>
+      r.paymentStatus === "completed" &&
+      r.finalSaleValue != null &&
+      r.paymentAt != null &&
+      r.paymentAt >= from &&
+      r.paymentAt < to;
+
+    const current = rows.filter((r) => inRange(r, startOfThisWeek, startOfToday.getTime() + DAY));
+    const previous = rows.filter((r) => inRange(r, startOfPrevWeek, startOfThisWeek));
+
+    const sum = (rs: Doc<"lots">[]) => rs.reduce((s, r) => s + (r.finalSaleValue ?? 0), 0);
+    const kg = (rs: Doc<"lots">[]) => Math.round(rs.reduce((s, r) => s + r.weight, 0) * 10) / 10;
+
+    const gross = sum(current);
+    const prevGross = sum(previous);
+
+    // Per-day series for the trend visualization (this week, Mon–Sun style).
+    const daily = [] as Array<{ day: string; amount: number }>;
+    for (let i = 0; i < 7; i++) {
+      const from = startOfThisWeek + i * DAY;
+      const to = from + DAY;
+      const dayRows = current.filter((r) => inRange(r, from, to));
+      daily.push({ day: utcDayKey(from).slice(5), amount: sum(dayRows) });
+    }
+
+    return {
+      weekStart: startOfThisWeek,
+      weekEnd: startOfToday.getTime() + DAY,
+      gross: gross, // net = gross: no expenses are tracked (§11 — not invented)
+      net: gross,
+      completedSales: current.length,
+      materialSoldKg: kg(current),
+      avgSale: current.length ? Math.round(gross / current.length) : 0,
+      prevGross,
+      prevCompletedSales: previous.length,
+      change: gross - prevGross,
+      changePct:
+        prevGross > 0 ? Math.round(((gross - prevGross) / prevGross) * 1000) / 10 : null,
+      daily,
+      note: "Net = gross completed sales — no expenses are tracked in this prototype.",
+    };
   },
 });
 
