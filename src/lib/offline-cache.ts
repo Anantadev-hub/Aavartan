@@ -48,3 +48,18 @@ export function writeCache(key: string, data: unknown) {
 export function cachedOrUndefined<T>(key: string): T | undefined {
   return readCache<T>(key)?.data;
 }
+
+/** Clear every cached entry — used on logout / auth mismatch so a new session
+ *  can never render another account's data. */
+export function clearCache() {
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(PREFIX)) doomed.push(key);
+    }
+    for (const key of doomed) localStorage.removeItem(key);
+  } catch {
+    /* private mode */
+  }
+}

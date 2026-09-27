@@ -4,6 +4,7 @@ import { useAppState, pushToast, speak } from "@/lib/app-state";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { LANG_LABELS } from "@/lib/i18n";
 import { clearPendingProfile, clearLastAuth } from "@/lib/auth-service";
+import { clearCache } from "@/lib/offline-cache";
 import { formatINR, formatDate, formatKg } from "@/lib/format";
 import {
   useEarnings, useMaterials, useMyLots, useProfile, useEarningsSimulator,
@@ -89,6 +90,7 @@ export default function CollectorEarnings() {
               }
               clearPendingProfile();
               clearLastAuth();
+              clearCache();
               navigate("/auth", { replace: true });
             })();
           }}

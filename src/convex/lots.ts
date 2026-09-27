@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { type Doc, type Id } from "./_generated/dataModel";
 import { type MutationCtx, type QueryCtx, mutation, query } from "./_generated/server";
-import { conditionValidator, lotStatusValidator, paymentMethodValidator } from "./schema";
+import { conditionValidator, lotStatusValidator, paymentMethodValidator, type TransactionStatus } from "./schema";
 
 // ---------------------------------------------------------------------------
 // Lots — full transactional lifecycle (POST /lots, GET /lots, quote, handover,
@@ -84,14 +84,7 @@ async function patchTransaction(
   patch: Partial<{
     paymentStatus: "PENDING" | "PAID";
     paymentMethod: "CASH" | "DIGITAL";
-    transactionStatus:
-      | "CREATED"
-      | "ACCEPTED"
-      | "HANDOVER_PENDING"
-      | "HANDED_OVER"
-      | "PAYMENT_PENDING"
-      | "COMPLETED"
-      | "CANCELLED";
+    transactionStatus: TransactionStatus;
   }>,
 ) {
   const txs = await ctx.db
@@ -307,6 +300,7 @@ export const createLot = mutation({
       lat: args.lat,
       lng: args.lng,
       status: args.sendNow ? "sent" : "created",
+      sentAt: args.sendNow ? now : undefined,
       paymentStatus: "none",
       syncOrigin: args.syncOrigin,
       createdAt: now,
@@ -328,7 +322,9 @@ export const sendLot = mutation({
     const lot = await ctx.db.get(lotId);
     if (!lot) throw new Error("Lot not found");
     if (lot.status !== "created") throw new Error("Lot already sent");
-    await ctx.db.patch(lotId, { status: "sent", updatedAt: Date.now() });
+    const now = Date.now();
+    await ctx.db.patch(lotId, { status: "sent", sentAt: now, updatedAt: now });
+    await patchTransaction(ctx, lotId, { transactionStatus: "SENT_TO_RECYCLER" });
     return { ok: true };
   },
 });
@@ -568,12 +564,52 @@ export const lotTimeline = query({
   handler: async (ctx, { lotId }) => {
     const lot = await ctx.db.get(lotId);
     if (!lot) return null;
+
+    // ---- State machine: every step derives from REAL persisted state -------
+    // A step is "done" ONLY when its backing record/timestamp exists. No
+    // positional shortcuts (index < current), no inferring future steps from
+    // the status enum. "current" marks the active stage; everything else is
+    // "todo" until its own state actually exists.
+    const createdDone = true; // the lot row itself is the proof of creation
+    // sentAt is the primary evidence; lots persisted before the field existed
+    // (no sentAt) are still provably sent when their status has moved past
+    // "created" — status transitions happen only in sendLot/createLot(sendNow).
+    const sentDone =
+      lot.sentAt != null ||
+      ["sent", "accepted", "rejected", "handed_over", "completed"].includes(lot.status);
+    const quotedDone = lot.quotedAt != null || lot.status === "rejected";
+    const handoverDone = lot.handoverAt != null && lot.handoverConfirmedByCollector === true && lot.handoverConfirmedByRecycler === true;
+    const paymentDone = lot.paymentAt != null && lot.paymentStatus === "completed";
+
+    // Rejection is a terminal branch, not a stage: the quoted step shows the
+    // rejection instead of a quote, and handover/payment can never proceed.
+    const rejected = lot.status === "rejected";
+
+    // The "current" stage is the first stage whose completion is missing.
+    let currentCode: TimelineEvent["code"] = "created";
+    if (createdDone && !sentDone) currentCode = "sent";
+    else if (sentDone && !quotedDone) currentCode = "quoted";
+    else if (quotedDone && !handoverDone) currentCode = "handed_over";
+    else if (handoverDone && !paymentDone) currentCode = "payment";
+
+    const stateOf = (code: TimelineEvent["code"]): TimelineEvent["state"] => {
+      const done =
+        code === "created" ? createdDone :
+        code === "sent" ? sentDone :
+        code === "quoted" ? quotedDone :
+        code === "handed_over" ? handoverDone :
+        paymentDone;
+      const current = rejected ? null : code === currentCode && !done;
+      if (done) return "done";
+      return current ? "pending" : "todo";
+    };
+
     const events: TimelineEvent[] = [
       {
         code: "created",
         label: "Lot created",
         timestamp: lot.createdAt,
-        state: "done",
+        state: stateOf("created"),
         description:
           lot.syncOrigin === "offline"
             ? "Captured offline, synced to the platform"
@@ -582,24 +618,17 @@ export const lotTimeline = query({
       {
         code: "sent",
         label: "Sent to recycler",
-        timestamp: lot.status === "created" ? null : (lot.quotedAt ?? lot.updatedAt),
-        state: lot.status === "created" ? "todo" : "done",
-        description: "Waiting for the recycler to review",
+        timestamp: lot.sentAt ?? null,
+        state: stateOf("sent"),
+        description: sentDone ? "Waiting for the recycler to review" : "Not sent to any recycler yet",
       },
       {
         code: "quoted",
-        label: lot.status === "rejected" ? "Rejected by recycler" : "Recycler quoted",
-        timestamp: lot.quotedAt ?? null,
-        state:
-          lot.status === "rejected"
-            ? "done"
-            : lot.quotedAt !== null
-              ? "done"
-              : lot.status === "sent"
-                ? "pending"
-                : "todo",
+        label: rejected ? "Rejected by recycler" : "Recycler quoted",
+        timestamp: rejected ? (lot.updatedAt ?? null) : (lot.quotedAt ?? null),
+        state: stateOf("quoted"),
         description:
-          lot.status === "rejected"
+          rejected
             ? (lot.rejectionReason ?? "Lot was rejected")
             : lot.quotedPrice
               ? `₹${lot.quotedPrice}/kg agreed`
@@ -608,21 +637,21 @@ export const lotTimeline = query({
       {
         code: "handed_over",
         label: "Handover completed",
-        timestamp: lot.handoverAt ?? null,
-        state:
-          lot.handoverAt !== null ? "done" : lot.status === "accepted" ? "pending" : "todo",
-        description: lot.handoverRef
+        timestamp: handoverDone ? (lot.handoverAt ?? null) : null,
+        state: stateOf("handed_over"),
+        description: handoverDone
           ? `Digital record ${lot.handoverRef}`
-          : "Both sides must confirm",
+          : lot.handoverConfirmedByCollector || lot.handoverConfirmedByRecycler
+            ? "Waiting for the other side to confirm"
+            : "Both sides must confirm",
       },
       {
         code: "payment",
         label: "Payment completed",
-        timestamp: lot.paymentAt ?? null,
-        state:
-          lot.paymentAt !== null ? "done" : lot.status === "handed_over" ? "pending" : "todo",
-        description: lot.paymentMethod
-          ? `${lot.paymentMethod.toUpperCase()} — ₹${lot.finalSaleValue ?? 0}`
+        timestamp: paymentDone ? (lot.paymentAt ?? null) : null,
+        state: stateOf("payment"),
+        description: paymentDone
+          ? `${lot.paymentMethod?.toUpperCase() ?? "Payment"} — ₹${lot.finalSaleValue ?? 0}`
           : "Cash or UPI after handover",
       },
     ];

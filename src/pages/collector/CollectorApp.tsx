@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { AppHeader, BottomNav, PhoneFrame, type NavTab } from "@/components/shell";
 import { OfflineBanner, LoadingState, Toasts, SyncIndicator } from "@/components/ui/kit";
 import { useAppState, useSyncWorker, setOnline } from "@/lib/app-state";
-import { useProfile, hasBackendId, usePendingProfileSync } from "@/hooks/use-kc-data";
+import { useProfile, useProfileState, hasBackendId, usePendingProfileSync } from "@/hooks/use-kc-data";
+import { clearCache } from "@/lib/offline-cache";
 import CollectorHome from "./CollectorHome";
 import CollectorPrices from "./CollectorPrices";
 import AddFlow from "./AddFlow";
@@ -33,10 +35,33 @@ function Redirect({ to }: { to: string }) {
 
 export default function CollectorApp() {
   const { t } = useAppState();
+  const navigate = useNavigate();
   const profile = useProfile();
+  const profileState = useProfileState();
   const [tab, setTab] = useState<NavTab>("home");
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [openLotId, setOpenLotId] = useState<Id<"lots"> | null>(null);
+
+  // Session lost (or a verified session with no backend profile): drop every
+  // cached account artifact ONCE so a new session can never render another
+  // account's data, then let the redirect below re-authenticate.
+  useEffect(() => {
+    if (profileState.phase === "anonymous" || profileState.phase === "missing") {
+      clearCache();
+    }
+  }, [profileState.phase]);
+
+  // A locally onboarded (Pending Sync) profile whose background sync stalls
+  // still offers a recovery path instead of an indefinite spinner.
+  const [syncStalled, setSyncStalled] = useState(false);
+  useEffect(() => {
+    if (profileState.phase !== "pending-sync") {
+      setSyncStalled(false);
+      return;
+    }
+    const id = setTimeout(() => setSyncStalled(true), 20_000);
+    return () => clearTimeout(id);
+  }, [profileState.phase]);
 
   // Seed reference data once at bootstrap (public mutation; no-op after first run).
   const seed = useMutation(api.seed.seedIfEmpty);
@@ -74,17 +99,19 @@ export default function CollectorApp() {
     hasBackendId(profile), // only when a backend profile actually exists
   );
 
-  if (profile === undefined) {
+  // 1) auth hydrating · 2) unauthenticated/stale session · 3) role gate —
+  // all three are NORMAL states, never render exceptions.
+  if (profileState.phase === "loading") {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background">
         <LoadingState label={t("common.loading")} />
       </div>
     );
   }
-  if (profile === null) {
+  if (profileState.phase === "anonymous" || profileState.phase === "missing") {
     return <Redirect to="/auth" />;
   }
-  if (profile.role !== "collector") {
+  if (!profile || profile.role !== "collector") {
     return <Redirect to="/recycler" />;
   }
 
@@ -134,8 +161,19 @@ export default function CollectorApp() {
 
   return (
     <PhoneFrame>
-      <AppHeader title="Kabadiwala Connect" right={<SyncIndicator />} />
+      <AppHeader title="Aavartan" right={<SyncIndicator />} />
       <OfflineBanner />
+      {syncStalled && (
+        <div className="mx-4 mt-2 rounded-2xl bg-card px-3.5 py-2.5 text-[12.5px] text-muted2 shadow-[var(--clay-1)]">
+          Still syncing your account… work is saved on this device. {" "}
+          <button
+            onClick={() => navigate("/auth", { replace: true })}
+            className="font-bold text-[var(--teal)]"
+          >
+            Sign in again
+          </button>
+        </div>
+      )}
       <main className="flex-1 overflow-y-auto">
         {tab === "home" && (
           <CollectorHome

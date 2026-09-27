@@ -1,7 +1,7 @@
 {
-  "name": "freebuff.com application",
-  "short_name": "freebuff.com",
-  "description": "freebuff.com application",
+  "name": "Aavartan",
+  "short_name": "Aavartan",
+  "description": "Aavartan — e-waste platform connecting collectors and verified recyclers",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

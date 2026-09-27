@@ -10,7 +10,7 @@ export const LANG_LABELS: Record<Lang, string> = {
 type Dict = Record<string, string>;
 
 const en: Dict = {
-  "app.name": "Kabadiwala Connect",
+  "app.name": "Aavartan",
   "app.tagline": "Bringing informal collectors into the formal recycling chain.",
   "nav.home": "Home",
   "nav.prices": "Prices",

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -12,10 +13,11 @@ import { ClayButton, ClayCard, ClayBadge, LoadingState, OfflineBanner, Toasts, S
 import { useAppState, setOnline } from "@/lib/app-state";
 import { clearPendingProfile, clearLastAuth } from "@/lib/auth-service";
 import {
-  useProfile, useRecyclerStats, useAvailableLots, useMaterials, useFacility,
+  useProfile, useProfileState, useRecyclerStats, useAvailableLots, useMaterials, useFacility,
   useCollectionAreasHeatmap, usePurchasesSummary, isLocalProfile, useRecyclerBindingRepair,
   type LotWithCollector,
 } from "@/hooks/use-kc-data";
+import { clearCache } from "@/lib/offline-cache";
 import { formatINR, timeAgo, formatKg } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import RecyclerLots from "./RecyclerLots";
@@ -37,7 +39,16 @@ export default function RecyclerApp() {
   const navigate = useNavigate();
   const { signOut } = useAuthActions();
   const profile = useProfile();
+  const profileState = useProfileState();
   const [tab, setTab] = useState<Tab>("home");
+
+  // Session lost / stale identity: drop cached account artifacts once so no
+  // other account's data can render, then re-authenticate via the redirect.
+  useEffect(() => {
+    if (profileState.phase === "anonymous" || profileState.phase === "missing") {
+      clearCache();
+    }
+  }, [profileState.phase]);
 
   // Repair a signed-in backend profile that predates its facility binding so
   // the portal never loops to /auth over a missing recyclerId.
@@ -61,17 +72,18 @@ export default function RecyclerApp() {
     };
   }, []);
 
-  if (profile === undefined) {
+  // Auth hydrating → loading; unauthenticated/stale session → login.
+  if (profileState.phase === "loading") {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background">
         <LoadingState label={t("common.loading")} />
       </div>
     );
   }
-  if (profile === null) {
+  if (profileState.phase === "anonymous" || profileState.phase === "missing") {
     return <Redirect to="/auth?role=recycler" />;
   }
-  if (profile.role !== "recycler") {
+  if (!profile || profile.role !== "recycler") {
     return <Redirect to="/app" />;
   }
   // A signed-in recycler whose facility binding is still missing (seed raced
@@ -90,7 +102,7 @@ export default function RecyclerApp() {
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] font-extrabold leading-tight text-navy">
-              Kabadiwala Connect — Recycler Portal
+              Aavartan — Recycler Portal
             </p>
             <p className="flex items-center gap-1 text-[11px] font-semibold text-muted2">
               {profile.name} (demo account)
@@ -110,6 +122,7 @@ export default function RecyclerApp() {
                 }
                 clearPendingProfile();
                 clearLastAuth();
+                clearCache();
                 navigate("/auth", { replace: true });
               })();
             }}

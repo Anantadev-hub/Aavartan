@@ -169,7 +169,7 @@ export default function LoginScreen() {
                   <RecycleIcon className="size-7" />
                 </span>
                 <p className="mt-3 text-[17px] font-extrabold tracking-wide text-navy">
-                  KABADIWALA CONNECT
+                  AAVARTAN
                 </p>
                 <p className="mt-1 max-w-[300px] text-[12.5px] leading-snug text-muted2">
                   Bringing informal collectors into the formal recycling chain.
@@ -180,7 +180,7 @@ export default function LoginScreen() {
                 Welcome back
               </h1>
               <p className="mt-1 text-[14px] text-muted2">
-                Sign in to continue to Kabadiwala Connect.
+                Sign in to continue to Aavartan.
               </p>
 
               <div className="mt-6 space-y-4">

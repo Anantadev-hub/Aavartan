@@ -21,7 +21,7 @@ export function RoleStep({
       <div className="mt-5 space-y-3">
         <RoleCard
           emoji="🛵"
-          title="Kabadiwala"
+          title="Collector"
           sub="E-waste Collector"
           description="Collect, identify and sell e-waste to authorized recyclers."
           selected={role === "collector"}
@@ -51,7 +51,7 @@ export function RoleStep({
         className="mt-5"
         onClick={() => {
           if (!role) {
-            setError("Please select how you use Kabadiwala Connect.");
+            setError("Please select how you use Aavartan.");
             return;
           }
           onContinue(role);
@@ -81,7 +81,7 @@ export function ConfirmStep({
             {role === "collector" ? "🛵" : "🏭"}
           </span>
           <p className="mt-1 text-[22px] font-extrabold text-navy">
-            {role === "collector" ? "Kabadiwala" : "Recycler"}
+            {role === "collector" ? "Collector" : "Recycler"}
           </p>
           <p className="text-[12.5px] font-bold uppercase tracking-wide text-teal-deep">
             {role === "collector" ? "E-waste Collector" : "Authorized Buyer"}

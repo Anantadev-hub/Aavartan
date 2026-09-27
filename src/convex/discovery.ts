@@ -150,11 +150,17 @@ export const submitQuote = mutation({
   },
 });
 
-/** List a recycler's own quotes (facility view). */
+/** List a recycler's own quotes (facility view). Non-throwing read: an
+ *  unauthenticated session gets [] instead of a render-crashing error. */
 export const myQuotes = query({
   args: {},
   handler: async (ctx) => {
-    const profile = await requireProfile(ctx);
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return [];
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
     if (!profile?.recyclerId) return [];
     const rows = await ctx.db
       .query("recyclerQuotes")

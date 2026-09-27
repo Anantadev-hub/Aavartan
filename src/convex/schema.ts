@@ -74,6 +74,7 @@ export type LotStatus = (typeof LOT_STATUSES)[number];
 // the lot lifecycle; stored alongside each transaction record).
 export const TRANSACTION_STATUSES = [
   "CREATED",
+  "SENT_TO_RECYCLER",
   "ACCEPTED",
   "HANDOVER_PENDING",
   "HANDED_OVER",
@@ -259,6 +260,7 @@ const schema = defineSchema(
       lat: v.optional(v.number()), // static demo coords
       lng: v.optional(v.number()),
       status: lotStatusValidator,
+      sentAt: v.optional(v.number()), // when the lot was actually dispatched to a recycler
       rejectionReason: v.optional(v.string()),
       handoverRef: v.optional(v.string()), // HANDOVER-KC-XXXXXX
       handoverHash: v.optional(v.string()), // demo tamper-evidence checksum

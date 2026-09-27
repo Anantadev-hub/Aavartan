@@ -70,22 +70,81 @@ export function useAuthReady(): boolean {
 
 /** Signed-in user's profile (collector or recycler role). */
 export function useProfile(): AppProfile | Doc<"profiles"> | null | undefined {
+  const state = useProfileState();
+  switch (state.phase) {
+    case "loading":
+      return undefined; // resolving
+    case "anonymous":
+    case "missing":
+      return null; // shells redirect to /auth
+    case "pending-sync":
+    case "ready":
+      return state.profile;
+  }
+}
+
+/**
+ * Explicit auth/profile state machine. Distinguishes:
+ *   loading      — Convex Auth session still hydrating (no queries act, no
+ *                  redirects fire, cached profiles are NOT trusted as auth)
+ *   anonymous    — unauthenticated user (render/redirect to login)
+ *   pending-sync — locally onboarded profile whose backend record does not
+ *                  exist yet (offline-first bootstrap; background sync fills it)
+ *   missing      — authenticated but the backend has NO profile for this
+ *                  session (stale identity → shells clear cache + re-onboard)
+ *   ready        — real backend profile resolved
+ * A localStorage-cached *backend* profile is only ever used for display while
+ * the session is verified AND the profile query cannot resolve (offline) —
+ * never as proof of authentication.
+ */
+export type ProfileState =
+  | { phase: "loading" }
+  | { phase: "anonymous" }
+  | { phase: "pending-sync"; profile: AppProfile }
+  | { phase: "missing" }
+  | { phase: "ready"; profile: Doc<"profiles"> };
+
+export function useProfileState(): ProfileState {
+  const { isLoading, isAuthenticated } = useConvexAuth();
+  // myProfile is a non-throwing read: null when unauthenticated, undefined
+  // while resolving, profile document when the session has one.
   const live = useQuery(api.profiles.myProfile, {});
-  // Read once per mount; live data always takes precedence when it exists.
   const pending = useMemo(() => loadPendingProfile(), []);
   useEffect(() => {
     if (live) writeCache("profile", live);
   }, [live]);
-  if (live) return live;
-  const cached = cachedOrUndefined<Doc<"profiles">>("profile");
-  if (cached) return cached;
-  if (pending) {
-    // Offline onboarding (either role): render the app from the locally saved
-    // profile. For recyclers the portal renders with empty facility data
-    // (recyclerId stays undefined) instead of bouncing to sign-in.
-    return { ...pending, isLocalProfile: true };
+
+  // 1) Auth still hydrating — never trust cache as proof of authentication.
+  if (isLoading) return { phase: "loading" };
+
+  const pendingLocal =
+    pending && !pending.synced
+      ? ({ ...pending, isLocalProfile: true } as AppProfile)
+      : null;
+
+  // 2) Unauthenticated: only an unsynced LOCAL onboarding may render (the
+  //    offline-first path); cached backend profiles do NOT authenticate.
+  if (!isAuthenticated) {
+    return pendingLocal
+      ? { phase: "pending-sync", profile: pendingLocal }
+      : { phase: "anonymous" };
   }
-  return live; // undefined = resolving; null = none (existing redirect behavior)
+
+  // 3) Authenticated — resolve the real backend profile.
+  if (live) return { phase: "ready", profile: live };
+  if (live === undefined) {
+    // Profile query still in flight (or unreachable offline). A pending local
+    // onboarding renders immediately; a verified session may display its
+    // cached profile while the query resolves.
+    if (pendingLocal) return { phase: "pending-sync", profile: pendingLocal };
+    const cached = cachedOrUndefined<Doc<"profiles">>("profile");
+    if (cached) return { phase: "ready", profile: cached };
+    return { phase: "loading" };
+  }
+  // 4) live === null — authenticated but no backend profile for this session
+  //    (fresh sign-in before onboarding sync, or a stale identity).
+  if (pendingLocal) return { phase: "pending-sync", profile: pendingLocal };
+  return { phase: "missing" };
 }
 
 /** True when the profile is a real backend profile with a usable _id. */

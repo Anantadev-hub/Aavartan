@@ -22,7 +22,7 @@ export default function Landing() {
             <RecycleIcon className="size-6" />
           </span>
           <div>
-            <p className="text-[15px] font-extrabold leading-tight text-navy">Kabadiwala Connect</p>
+            <p className="text-[15px] font-extrabold leading-tight text-navy">Aavartan</p>
             <p className="text-[11px] font-medium text-muted2">SIH 2026 · SIH26229</p>
           </div>
         </div>
@@ -69,7 +69,7 @@ export default function Landing() {
               .
             </h1>
             <p className="mt-4 max-w-xl text-lg text-muted2">
-              Kabadiwala Connect helps kabadiwalas identify e-waste, see fair indicative prices and sell to
+              Aavartan helps kabadiwalas identify e-waste, see fair indicative prices and sell to
               verified recyclers — with a verified digital handover record for every transaction.
             </p>
 
@@ -195,12 +195,12 @@ export default function Landing() {
         <div className="mt-12 grid gap-4 sm:grid-cols-2">
           <ClayCard className="rounded-3xl">
             <p className="text-xs font-bold uppercase tracking-wider text-teal-deep">For collectors</p>
-            <p className="mt-1 text-xl font-extrabold text-navy">Kabadiwala app</p>
+            <p className="mt-1 text-xl font-extrabold text-navy">Aavartan collector app</p>
             <p className="mt-1.5 text-sm text-muted2">
               Photo → AI material ID → indicative value → recycler quotes → digital handover → earnings.
             </p>
             <ClayButton className="mt-4 w-full" onClick={() => navigate("/auth?role=collector")}>
-              Enter as Kabadiwala
+              Enter as Collector
             </ClayButton>
           </ClayCard>
           <ClayCard className="rounded-3xl">
