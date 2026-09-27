@@ -35,15 +35,27 @@ function sessionFrom(req: Request): DemoSession | null {
 const http = httpRouter();
 
 // Route table: registered here and re-mounted by http.ts (routers don't compose).
+// `prefix: true` registers a pathPrefix route — Convex http.route matches exact
+// paths only, so dynamic segments (e.g. /api/prices/current/{material}) are
+// served via a prefix route that parses the parameter from the URL.
 const restRoutes: Array<{
-  path: string;
+  path?: string;
+  pathPrefix?: string;
   method: "GET" | "POST";
   handler: ReturnType<typeof httpAction>;
 }> = [];
 
-function route(path: string, method: "GET" | "POST", handler: ReturnType<typeof httpAction>) {
-  restRoutes.push({ path, method, handler });
-  http.route({ path, method, handler });
+function route(
+  path: string,
+  method: "GET" | "POST",
+  handler: ReturnType<typeof httpAction>,
+  opts: { prefix?: boolean } = {},
+) {
+  const entry = opts.prefix
+    ? { pathPrefix: path, method, handler }
+    : { path, method, handler };
+  restRoutes.push(entry);
+  http.route({ ...entry });
 }
 
 // ---- Auth (§14) --------------------------------------------------------------
@@ -114,6 +126,53 @@ route("/api/prices/trends", "GET", httpAction(async (ctx, req) => {
   const days = daysParam === 7 || daysParam === 90 ? daysParam : 30;
   const trends = await ctx.runQuery(api.materials.priceTrends, { materialCode, days });
   return json({ success: true, materialCode, days, demo: true, trends });
+}));
+
+// ---- Market-linked price endpoints (§13) -------------------------------------
+// The React app reads OUR database; these endpoints expose the stored market
+// records for integrations. POST /refresh is operator-protected: it accepts a
+// PRICE_REFRESH_KEY header (production) or an authenticated demo session —
+// never an anonymous caller.
+
+route("/api/prices/current", "GET", httpAction(async (ctx) => {
+  const data = await ctx.runQuery(api.pricing.currentMarketPrices, {});
+  return json({ success: true, ...data });
+}));
+
+route("/api/prices/current/", "GET", httpAction(async (ctx, req) => {
+  const parts = new URL(req.url).pathname.split("/").filter(Boolean);
+  const materialCode = (parts[3] ?? "").toLowerCase().replace(/\/+$/, ""); // [api, prices, current, :material]
+  if (!materialCode) return bad("material code required", 400);
+  const price = await ctx.runQuery(api.pricing.currentMarketPrice, { materialCode });
+  if (!price) return bad("Unknown material or no price record", 404);
+  return json({ success: true, price });
+}), { prefix: true });
+
+route("/api/prices/history/", "GET", httpAction(async (ctx, req) => {
+  const url = new URL(req.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  const materialCode = (parts[3] ?? "").toLowerCase().replace(/\/+$/, ""); // [api, prices, history, :material]
+  if (!materialCode) return bad("material code required", 400);
+  const daysParam = Number(url.searchParams.get("days") ?? 30);
+  const days = daysParam === 7 || daysParam === 90 ? daysParam : 30;
+  const history = await ctx.runQuery(api.pricing.marketPriceHistory, { materialCode, days });
+  const range = await ctx.runQuery(api.pricing.fairPriceRange, { materialCode });
+  return json({ success: true, materialCode, days, history, fairRange: range });
+}), { prefix: true });
+
+route("/api/prices/refresh", "POST", httpAction(async (ctx, req) => {
+  const adminKey = process.env.PRICE_REFRESH_KEY;
+  const headerKey = req.headers.get("x-price-refresh-key");
+  const session = sessionFrom(req); // demo-session bearer token
+  const authorized =
+    (adminKey !== undefined && headerKey === adminKey) ||
+    (adminKey === undefined && session !== null);
+  if (!authorized) {
+    return bad("Price refresh requires operator credentials", 401);
+  }
+  const res = await ctx.runAction(api.pricing.refreshAllPricesAction, {});
+  if (!res.ok) return bad(`Refresh failed — ${res.error}`, 502);
+  return json({ success: true, provider: res.provider, stored: res.stored, total: res.total });
 }));
 
 route("/api/prices/estimate", "POST", httpAction(async (ctx, req) => {

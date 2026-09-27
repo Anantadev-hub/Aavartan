@@ -1,7 +1,7 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { cacheRecentPrices, getRecentPrices } from "@/lib/app-state";
 import { cachedOrUndefined, writeCache } from "@/lib/offline-cache";
@@ -345,6 +345,98 @@ export function useLatestDailyPrice(materialCode: string | undefined) {
   return live !== undefined
     ? live
     : cachedOrUndefined<{ _id: string; materialCode: string; day: string; pricePerKg: number; source: string; recordedAt: number }>(key);
+}
+
+// ---- Market-linked dynamic pricing (§13/§14) --------------------------------
+
+export type MarketPriceRow = {
+  materialCode: string;
+  materialId: string | null;
+  name: string;
+  unit: string;
+  pricePerKg: number;
+  currency: string;
+  location: string;
+  grade: string;
+  day: string;
+  recordedAt: number;
+  fetchedAt: number;
+  sourceName: string;
+  sourceKind: "api" | "reference-feed" | "demo";
+  sourceReference: string | null;
+  prevPricePerKg: number | null;
+  changePerKg: number | null;
+  changePct: number | null;
+  terminology: { headline: string; note: string };
+};
+
+type MarketPricesPayload = {
+  prices: MarketPriceRow[];
+  provider: {
+    name: string;
+    displayName: string;
+    sourceKind: "api" | "reference-feed" | "demo";
+    lastAttemptAt: number;
+    lastSuccessAt: number | null;
+    lastError: string | null;
+  } | null;
+};
+
+/**
+ * Backend market price board (§7): reads ONLY stored records — the React app
+ * never calls an external market source. Cached for offline reads.
+ */
+export function useCurrentMarketPrices() {
+  const live = useQuery(api.pricing.currentMarketPrices, {});
+  useEffect(() => {
+    if (live) writeCache("marketPrices.current", live);
+  }, [live]);
+  return live !== undefined
+    ? live
+    : cachedOrUndefined<MarketPricesPayload>("marketPrices.current");
+}
+
+/** One material's stored history for the trends chart (§15) — no fake data. */
+export function useMarketPriceHistory(materialCode: string, days: 7 | 30 | 90) {
+  const live = useQuery(api.pricing.marketPriceHistory, { materialCode, days });
+  const key = `marketHistory.${materialCode}.${days}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined
+    ? live
+    : cachedOrUndefined<Array<{ day: string; pricePerKg: number; sourceName: string; sourceKind: string; recordedAt: number }>>(key);
+}
+
+/** §16 fair-price range computed from STORED records on the backend. */
+export function useFairPriceRange(materialCode: string | undefined) {
+  const live = useQuery(
+    api.pricing.fairPriceRange,
+    materialCode ? { materialCode } : "skip",
+  );
+  const key = `fairRange.${materialCode ?? "x"}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined
+    ? live
+    : cachedOrUndefined<{ low: number; high: number; records: number; earliestDay: string }>(key);
+}
+
+/**
+ * Manual refresh trigger (§14). Calls the refresh API path through Convex
+ * (same backend entrypoint the cron and REST endpoint use). Refreshes happen
+ * on board open / app resume / explicit tap — never on every render.
+ */
+export function useRefreshPrices() {
+  const refresh = useAction(api.pricing.refreshAllPricesAction);
+  return useCallback(async () => {
+    try {
+      return await refresh({});
+    } catch {
+      return null; // backend unreachable — board falls back to last fetched
+    }
+  }, [refresh]);
 }
 
 /** §11 weekly net earnings report (completed + paid lots only). */

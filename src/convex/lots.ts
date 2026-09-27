@@ -164,7 +164,8 @@ export const estimateValue = query({
       ratePerKg: Math.round(rate),
       estimatedValue: Math.round(weight * rate),
       priceDay: snap?.day ?? null,
-      priceSource: snap?.source ?? "board-default (demo)",
+      priceSource: snap?.source ?? `Board default — ${m.name} (demo)`,
+      priceSourceKind: snap?.sourceKind ?? "board-default",
     };
   },
 });
@@ -173,15 +174,36 @@ export const estimateValue = query({
 async function latestRate(
   ctx: { db: QueryCtx["db"] | MutationCtx["db"] },
   materialCode: string,
-): Promise<{ _id: import("./_generated/dataModel").Id<"dailyPrices">; day: string; pricePerKg: number; source: string; recordedAt: number } | null> {
+): Promise<{
+  _id: import("./_generated/dataModel").Id<"dailyPrices">;
+  day: string;
+  pricePerKg: number;
+  source: string;
+  sourceKind: "api" | "reference-feed" | "demo" | "manual" | undefined;
+  marketPriceId: import("./_generated/dataModel").Id<"marketPrices"> | undefined;
+  recordedAt: number;
+} | null> {
   const rows = await ctx.db
     .query("dailyPrices")
     .withIndex("by_material", (q) => q.eq("materialCode", materialCode))
     .collect();
   if (rows.length === 0) return null;
-  rows.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.recordedAt - a.recordedAt));
-  const s = rows[0];
-  return { _id: s._id, day: s.day, pricePerKg: s.pricePerKg, source: s.source, recordedAt: s.recordedAt };
+  // A price dated in the future must never value a lot created today
+  // (defensive: the demo "simulate next daily price" seam stays inert).
+  const today = utcDayKey();
+  const applicable = rows.filter((r) => r.day <= today);
+  if (applicable.length === 0) return null;
+  applicable.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.recordedAt - a.recordedAt));
+  const s = applicable[0];
+  return {
+    _id: s._id,
+    day: s.day,
+    pricePerKg: s.pricePerKg,
+    source: s.source,
+    sourceKind: s.sourceKind,
+    marketPriceId: s.marketPriceId,
+    recordedAt: s.recordedAt,
+  };
 }
 
 export const createLot = mutation({
@@ -222,6 +244,12 @@ export const createLot = mutation({
     const rate = baseRate * (CONDITION_MULTIPLIER[args.condition] ?? 1);
     const estimatedValue = Math.round(args.weight * rate);
     const referenceId = await nextReferenceId(ctx);
+    // §9 provenance: the exact source of the frozen price, from the market
+    // provider when the snapshot was market-linked (never claimed live beyond
+    // its real source kind), else the pre-market board default.
+    const priceSource =
+      snap?.source ?? `Board default — ${m.name} (demo)`;
+    const priceSourceKind = snap?.sourceKind ?? ("board-default" as const);
     // Normalize AI confidence to the UI contract (0-100 integer) regardless of
     // what the client sent (§45: never trust client-provided AI values).
     const aiConfidenceNormalized =
@@ -250,6 +278,9 @@ export const createLot = mutation({
       pricePerKgAtCreation: Math.round(baseRate * 10) / 10,
       priceRecordId: snap?._id,
       priceTimestamp: snap?.recordedAt,
+      priceSource,
+      priceSourceKind,
+      marketPriceId: snap?.marketPriceId,
       locationLabel: args.locationLabel,
       lat: args.lat,
       lng: args.lng,
@@ -265,7 +296,7 @@ export const createLot = mutation({
       estimatedValue,
       condition: args.condition,
     });
-    return { lotId, referenceId, estimatedValue, pricePerKg: Math.round(rate), priceDay: snap?.day ?? null };
+    return { lotId, referenceId, estimatedValue, pricePerKg: Math.round(rate), priceDay: snap?.day ?? null, priceSource, priceSourceKind };
   },
 });
 

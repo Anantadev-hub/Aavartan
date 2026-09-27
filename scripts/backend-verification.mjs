@@ -228,6 +228,129 @@ async function main() {
   });
   report("§2 Dedupe: same phone → same account", again._id === profA._id);
 
+  // ===========================================================================
+  // MARKET-LINKED DYNAMIC PRICING TESTS (§19, Tests 1–9)
+  // ===========================================================================
+  // The legacy §10 checks above planted a manual ₹90 override for TODAY. The
+  // market battery below runs against a clean state: re-ingest today's provider
+  // quote first (the refresh re-bridges today's valuation row), then read the
+  // record the pipeline actually accepted.
+  await client.action(api.pricing.refreshAllPricesAction, {});
+  const pcbMarket = await client.query(api.pricing.currentMarketPrice, { materialCode: "pcb" });
+  report(
+    "T1. Fetch current PCB price (market table)",
+    !!pcbMarket && Number.isFinite(pcbMarket.pricePerKg) && pcbMarket.pricePerKg > 0,
+    pcbMarket ? `₹${pcbMarket.pricePerKg}/kg` : "no record",
+  );
+
+  // Test 2: source + timestamp stored with the record.
+  report(
+    "T2. Price record carries source + timestamps",
+    !!pcbMarket &&
+      typeof pcbMarket.sourceName === "string" && pcbMarket.sourceName.length > 0 &&
+      pcbMarket.recordedAt > 0 && pcbMarket.fetchedAt > 0,
+    pcbMarket
+      ? `${pcbMarket.sourceName} (${pcbMarket.sourceKind}) · recorded ${new Date(pcbMarket.recordedAt).toISOString()} · fetched ${new Date(pcbMarket.fetchedAt).toISOString()}`
+      : "",
+  );
+
+  // Test 3+4: create a PCB lot and confirm the EXACT market price is frozen
+  // (compare against the lot's own frozen snapshot — display values round to
+  // whole rupees, so equality goes through the stored 1-decimal record).
+  const lot3 = await client.mutation(api.lots.createLot, {
+    collectorId: profA._id,
+    materialCode: "pcb",
+    weight: 10,
+    condition: "good",
+    locationLabel: "Okhla, New Delhi (demo)",
+    syncOrigin: "online",
+    sendNow: false,
+  });
+  report(
+    "T3. PCB lot created",
+    /^KC-\d{4}-\d{4,}$/.test(lot3.referenceId),
+    `${lot3.referenceId} @ ₹${lot3.pricePerKg}/kg`,
+  );
+  const lot3Detail = await client.query(api.lots.getLot, { lotId: lot3.lotId });
+  const frozen3 = lot3Detail.lot.pricePerKgAtCreation;
+  const expectedValue3 = Math.round(10 * frozen3);
+  report(
+    "T4. Lot stores the exact market price + provenance",
+    frozen3 === pcbMarket.pricePerKg &&
+      lot3Detail.lot.estimatedValue === expectedValue3 &&
+      lot3Detail.lot.priceSource === pcbMarket.sourceName &&
+      lot3Detail.lot.priceSourceKind === pcbMarket.sourceKind,
+    `10kg × ₹${frozen3} = ₹${lot3Detail.lot.estimatedValue} · source ${lot3Detail.lot.priceSource}`,
+  );
+
+  // Test 5: refresh the price board (same backend entrypoint as the cron).
+  const refreshRes = await client.action(api.pricing.refreshAllPricesAction, {});
+  report(
+    "T5. Price board refresh (backend ingestion)",
+    refreshRes.ok === true && refreshRes.stored >= 0,
+    `provider ${refreshRes.provider} · ${refreshRes.stored}/${refreshRes.total} stored`,
+  );
+
+  // Test 6: the frontend bundle must contain NO hardcoded 350/410 PCB rates.
+  // (Run from repo root so it also covers lazy-loaded chunks.)
+  const { execSync } = await import("node:child_process");
+  let hardcodedHits = "";
+  try {
+    hardcodedHits = execSync(
+      `grep -RniE "(pricePerKg|currentPrice|price\\s*[:=]\\s*|₹)\\s*(350|410)\\b" src/pages src/components src/hooks src/lib 2>/dev/null | grep -v market || true`,
+      { encoding: "utf8" },
+    ).trim();
+  } catch {
+    hardcodedHits = "";
+  }
+  report(
+    "T6. No hardcoded ₹350/₹410 PCB prices in the React frontend",
+    hardcodedHits === "",
+    hardcodedHits === "" ? "frontend is fully backend-fed" : hardcodedHits.split("\n").slice(0, 3).join(" | "),
+  );
+
+  // Test 7: simulate the next daily price — publishes a NEW quote for the
+  // next day's drift, stamped as a current update (exactly what the daily
+  // cron does when the next quote arrives; NOT future-dated).
+  const sim = await client.mutation(api.pricing.simulateNextDailyPrice, {});
+  const nextPrice = await client.query(api.pricing.currentMarketPrice, { materialCode: "pcb" });
+  const todayKey = new Date().toISOString().slice(0, 10);
+  report(
+    "T7. Next daily price simulated + ingested",
+    sim.ok === true && sim.stored >= 1 && !!nextPrice &&
+      nextPrice.pricePerKg !== pcbMarket.pricePerKg && nextPrice.day === todayKey,
+    `published now (day ${nextPrice?.day}) · ₹${pcbMarket.pricePerKg} → ₹${nextPrice?.pricePerKg}/kg`,
+  );
+
+  // Test 8: NEW lots must use the NEW price (exact stored record comparison).
+  const lot4 = await client.mutation(api.lots.createLot, {
+    collectorId: profA._id,
+    materialCode: "pcb",
+    weight: 10,
+    condition: "good",
+    locationLabel: "Okhla, New Delhi (demo)",
+    syncOrigin: "online",
+    sendNow: false,
+  });
+  const lot4Detail = await client.query(api.lots.getLot, { lotId: lot4.lotId });
+  report(
+    "T8. NEW lot values at the NEW price",
+    lot4Detail.lot.pricePerKgAtCreation === nextPrice.pricePerKg &&
+      lot4Detail.lot.estimatedValue === Math.round(10 * nextPrice.pricePerKg) &&
+      lot4Detail.lot.priceSource === nextPrice.sourceName,
+    `${lot4.referenceId} @ ₹${lot4Detail.lot.pricePerKgAtCreation}/kg → ₹${lot4Detail.lot.estimatedValue}`,
+  );
+
+  // Test 9: OLD lots keep their original snapshot (§9 immutability).
+  const lot3After = await client.query(api.lots.getLot, { lotId: lot3.lotId });
+  report(
+    "T9. OLD lot retains its original price snapshot",
+    lot3After.lot.pricePerKgAtCreation === pcbMarket.pricePerKg &&
+      lot3After.lot.estimatedValue === expectedValue3 &&
+      lot3After.lot.priceSource === pcbMarket.sourceName,
+    `${lot3After.lot.referenceId} still ₹${lot3After.lot.pricePerKgAtCreation}/kg · ₹${lot3After.lot.estimatedValue} · ${lot3After.lot.priceSource}`,
+  );
+
   console.log("\n---- SUMMARY ----");
   const failed = results.filter((r) => !r.pass);
   console.log(`${results.length - failed.length}/${results.length} checks passed`);

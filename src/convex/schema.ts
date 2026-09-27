@@ -193,6 +193,17 @@ const schema = defineSchema(
       pricePerKgAtCreation: v.optional(v.number()), // §9 exact rate used
       priceRecordId: v.optional(v.id("dailyPrices")), // §9 which price row
       priceTimestamp: v.optional(v.number()), // §9 when that rate was recorded
+      priceSource: v.optional(v.string()), // §9 provenance: provider name
+      priceSourceKind: v.optional(
+        v.union(
+          v.literal("api"),
+          v.literal("reference-feed"),
+          v.literal("demo"),
+          v.literal("manual"),
+          v.literal("board-default"),
+        ),
+      ),
+      marketPriceId: v.optional(v.id("marketPrices")), // upstream market record
       quotedPrice: v.optional(v.number()), // ₹/kg quoted by recycler
       quotedAt: v.optional(v.number()),
       finalSaleValue: v.optional(v.number()),
@@ -302,15 +313,62 @@ const schema = defineSchema(
 
     // §8 daily price snapshots — the valuation source of truth. Each row is
     // the recorded rate for a material on a day; lots freeze whichever row
-    // they were created against (§9). Source is always labelled demo.
+    // they were created against (§9). Rows are written by the market-price
+    // ingestion pipeline (bridge of the current market quote) or, explicitly
+    // labelled, by manual/demo overrides — never presented as live market data.
     dailyPrices: defineTable({
       materialCode: v.string(),
       day: v.string(), // YYYY-MM-DD (IST-independent UTC day key)
       pricePerKg: v.number(),
-      source: v.string(), // "demo" / "manual" — never claimed as live market
+      source: v.string(), // provider name / "demo" / "manual"
+      sourceKind: v.optional(
+        v.union(
+          v.literal("api"),
+          v.literal("reference-feed"),
+          v.literal("demo"),
+          v.literal("manual"),
+        ),
+      ),
+      marketPriceId: v.optional(v.id("marketPrices")), // upstream market record
       recordedAt: v.number(),
     })      .index("by_material_day", ["materialCode", "day"])
       .index("by_material", ["materialCode"]),
+
+    // Market-linked price records (dynamic pricing §1–§6). Written ONLY by the
+    // backend ingestion pipeline from a MarketPriceProvider — the React app
+    // never touches an external source. Each row keeps the full provenance:
+    // material, location, grade, price, currency, unit, source and both the
+    // provider's recorded_at and our fetched_at timestamps. History is
+    // preserved; the newest valid record per material is is_current.
+    marketPrices: defineTable({
+      materialCode: v.string(),
+      location: v.string(), // e.g. "Delhi/NCR"
+      grade: v.string(), // e.g. "Standard" (provider-supplied when available)
+      pricePerKg: v.number(),
+      currency: v.literal("INR"),
+      unit: v.literal("kg"),
+      sourceName: v.string(), // e.g. "Demo Reference Feed" / "metals-api"
+      sourceKind: v.union(v.literal("api"), v.literal("reference-feed"), v.literal("demo")),
+      sourceReference: v.optional(v.string()), // URL / document reference
+      day: v.string(), // YYYY-MM-DD the quote applies to
+      recordedAt: v.number(), // provider's recorded timestamp (ms)
+      fetchedAt: v.number(), // when OUR backend fetched it (ms)
+      isCurrent: v.boolean(), // newest valid record for the material
+    })
+      .index("by_material", ["materialCode"])
+      .index("by_material_day", ["materialCode", "day"])
+      .index("by_material_current", ["materialCode", "isCurrent"]),
+
+    // One-row staleness status for the price feed (§11/§12): which provider is
+    // active, when it last ran, and the last safe error (never credentials).
+    priceFeedStatus: defineTable({
+      providerName: v.string(),
+      providerKind: v.union(v.literal("api"), v.literal("reference-feed"), v.literal("demo")),
+      providerDisplay: v.string(),
+      lastAttemptAt: v.number(),
+      lastSuccessAt: v.optional(v.number()),
+      lastError: v.optional(v.string()),
+    }),
 
     // Rules-based anomaly flags attached to lots (§34; "Review recommended",
     // never an accusation, never a trained ML claim).

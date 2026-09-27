@@ -405,6 +405,12 @@ export default function AddFlow({
                   {estimate ? formatINR(estimate.ratePerKg) : "…"}
                   <span className="text-sm font-bold text-muted2">/kg</span>
                 </p>
+                {estimate?.priceSource && (
+                  <p className="mt-0.5 max-w-[46ch] text-[10.5px] leading-snug text-muted2">
+                    {estimate.priceDay ? `Reference price for ${estimate.priceDay} · ` : ""}
+                    {estimate.priceSource}
+                  </p>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-muted2">

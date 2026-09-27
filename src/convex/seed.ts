@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { type MutationCtx, mutation } from "./_generated/server";
+import { type MutationCtx, internalMutation, mutation } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
 // One-time demo seeding (spec §41). The client calls seedIfEmpty() once on app
@@ -10,7 +10,6 @@ import { type MutationCtx, mutation } from "./_generated/server";
 // ---------------------------------------------------------------------------
 
 import { internal } from "./_generated/api";
-import { internalMutation } from "./_generated/server";
 
 function mulberry32(seed: number) {
   return function () {
@@ -307,16 +306,22 @@ export const seedDemoActivity = internalMutation({
   },
 });
 
-// Convenience: base + activity seeding in one call (internal; invoked by the
-// public seedIfEmpty below).
+// Convenience: base + activity + market-price seeding in one call (internal;
+// invoked by the public seedIfEmpty below).
 export const seedAllInternal = internalMutation({
   args: {},
   handler: async (ctx) => {
     await insertBaseData(ctx);
+    await ctx.runMutation(internal.pricing.seedMarketPricesIfEmpty, {});
     await ctx.runMutation(internal.seed.seedDemoActivity, {});
     return { seeded: true };
   },
 });
+
+/** One-time market-price bootstrap inside an existing deployment. */
+async function ensureMarketPrices(ctx: MutationCtx) {
+  await ctx.runMutation(internal.pricing.seedMarketPricesIfEmpty, {});
+}
 
 // Public bootstrap mutation: seeds once; safe to call from the client on app start.
 export const seedIfEmpty = mutation({
@@ -361,6 +366,9 @@ export const seedIfEmpty = mutation({
           });
         }
       }
+      // Market-price bootstrap (§6): on a deployment seeded before the
+      // market table existed, ingest once so the board shows backend records.
+      await ensureMarketPrices(ctx);
       // Top up the demo activity pipeline if absent.
       await ctx.runMutation(internal.seed.seedDemoActivity, {});
       return { seeded: false };

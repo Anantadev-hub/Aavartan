@@ -65,29 +65,43 @@ export const latestDailyPrice = query({
       .withIndex("by_material", (q) => q.eq("materialCode", materialCode))
       .collect();
     if (rows.length === 0) return null;
-    rows.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.recordedAt - a.recordedAt));
-    const latest = rows[0];
+    // Never surface a future-dated price as current (defensive, see lots.ts).
+    const today = utcDayKey();
+    const applicable = rows.filter((r) => r.day <= today);
+    if (applicable.length === 0) return null;
+    applicable.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.recordedAt - a.recordedAt));
+    const latest = applicable[0];
     return {
       _id: latest._id,
       materialCode: latest.materialCode,
       day: latest.day,
       pricePerKg: latest.pricePerKg,
       source: latest.source,
+      sourceKind: latest.sourceKind ?? (latest.source === "demo" ? "demo" : "manual"),
       recordedAt: latest.recordedAt,
     };
   },
 });
 
-/** Recent daily snapshots for one material (price-system inspection). */
+/** Recent daily snapshots for one material — reads the stored MARKET records
+ *  (§15) so the chart only ever shows backend history, never generated data. */
 export const dailyPriceHistory = query({
   args: { materialCode: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, { materialCode, limit }) => {
-    const rows = await ctx.db
-      .query("dailyPrices")
+    const market = await ctx.db
+      .query("marketPrices")
       .withIndex("by_material", (q) => q.eq("materialCode", materialCode))
       .collect();
-    rows.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.recordedAt - a.recordedAt));
-    return rows.slice(0, Math.max(1, Math.min(60, limit ?? 14)));
+    market.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.recordedAt - a.recordedAt));
+    return market.slice(0, Math.max(1, Math.min(90, limit ?? 30))).map((r) => ({
+      _id: r._id,
+      materialCode: r.materialCode,
+      day: r.day,
+      pricePerKg: r.pricePerKg,
+      source: r.sourceName,
+      sourceKind: r.sourceKind,
+      recordedAt: r.recordedAt,
+    }));
   },
 });
 
