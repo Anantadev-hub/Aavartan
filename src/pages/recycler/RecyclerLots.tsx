@@ -14,7 +14,13 @@ import {
 } from "@/hooks/use-kc-data";
 import { cn } from "@/lib/utils";
 
-export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers"> | null }) {
+export default function RecyclerLots({
+  recyclerId,
+  bindingState = "pending",
+}: {
+  recyclerId: Id<"recyclers"> | null;
+  bindingState?: "ready" | "pending" | "unbound";
+}) {
   const { t } = useAppState();
   const incoming = useAvailableLots();
   const { materials } = useMaterials();
@@ -27,6 +33,7 @@ export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers
       <ReviewLot
         lotId={reviewing as Id<"lots">}
         recyclerId={recyclerId}
+        bindingState={bindingState}
         onBack={() => setReviewing(null)}
       />
     );
@@ -113,10 +120,12 @@ export default function RecyclerLots({ recyclerId }: { recyclerId: Id<"recyclers
 function ReviewLot({
   lotId,
   recyclerId,
+  bindingState = "pending",
   onBack,
 }: {
   lotId: Id<"lots">;
   recyclerId: Id<"recyclers"> | null;
+  bindingState?: "ready" | "pending" | "unbound";
   onBack: () => void;
 }) {
   const { t } = useAppState();
@@ -162,7 +171,12 @@ function ReviewLot({
 
   const submit = async (reject: boolean) => {
     if (!recyclerId) {
-      pushToast("Facility binding still syncing — try again in a moment", "error");
+      pushToast(
+        bindingState === "unbound"
+          ? "No facility linked to your account — set one up in Facility settings"
+          : "Still finishing sign-in — try again in a moment",
+        "error",
+      );
       return;
     }
     setBusy(true);
@@ -325,7 +339,9 @@ function ReviewLot({
           </div>
           {!recyclerId && (
             <p className="mt-2 rounded-2xl bg-[var(--gold)] px-3.5 py-2.5 text-[12.5px] font-semibold text-[var(--navy)]">
-              Facility binding still syncing — quoting is disabled until it lands.
+              {bindingState === "unbound"
+                ? "No facility linked to your account — quoting is disabled. Set one up in Facility settings, or re-login to link the demo facility."
+                : "Finishing sign-in… quoting unlocks automatically when your account finishes syncing."}
             </p>
           )}
         </ClayCard>

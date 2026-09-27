@@ -10,11 +10,12 @@ import {
   ShieldCheckIcon, StarIcon, TruckIcon, ClockIcon, WalletIcon, PriceTagIcon,
 } from "@/components/icons";
 import { ClayButton, ClayCard, ClayBadge, LoadingState, OfflineBanner, Toasts, SyncIndicator } from "@/components/ui/kit";
-import { useAppState, setOnline } from "@/lib/app-state";
+import { useAppState, setOnline, pushToast } from "@/lib/app-state";
 import { clearPendingProfile, clearLastAuth } from "@/lib/auth-service";
 import {
   useProfile, useProfileState, useRecyclerStats, useAvailableLots, useMaterials, useFacility,
   useCollectionAreasHeatmap, usePurchasesSummary, isLocalProfile, useRecyclerBindingRepair,
+  usePendingProfileSync,
   type LotWithCollector,
 } from "@/hooks/use-kc-data";
 import { clearCache } from "@/lib/offline-cache";
@@ -50,9 +51,17 @@ export default function RecyclerApp() {
     }
   }, [profileState.phase]);
 
+  // Retry a stalled offline onboarding (Pending Sync profile) — mirrors the
+  // collector shell; completes the backend record once connectivity returns.
+  usePendingProfileSync();
+
   // Repair a signed-in backend profile that predates its facility binding so
-  // the portal never loops to /auth over a missing recyclerId.
-  useRecyclerBindingRepair();
+  // the portal never loops to /auth over a missing recyclerId. Auth-timing
+  // safe: idles until the session is verified — a mount-time run while auth
+  // was still resolving returned null server-side and silently no-oped.
+  useRecyclerBindingRepair({
+    enabled: profileState.phase === "ready" && !profile?.recyclerId,
+  });
 
   // Seed reference data (no-op after first run).
   const seed = useMutation(api.seed.seedIfEmpty);
@@ -90,6 +99,17 @@ export default function RecyclerApp() {
   // the profile creation) renders the portal with empty facility data and a
   // clear note instead of bouncing — the reactive binding repair above fills
   // it in as soon as the facility exists.
+  // Distinct facility-binding states — "still loading", "pending sign-in sync"
+  // and "confirmed no facility bound" are different situations and must never
+  // collapse into one eternal "syncing" message.
+  const bindingState: "ready" | "pending" | "unbound" =
+    profileState.phase === "pending-sync"
+      ? "pending"
+      : profile?.recyclerId
+        ? "ready"
+        : profileState.phase === "ready"
+          ? "unbound"
+          : "pending";
   const recyclerId = profile.recyclerId ?? null;
 
   return (
@@ -136,11 +156,11 @@ export default function RecyclerApp() {
       <OfflineBanner />
 
       <main className="mx-auto max-w-6xl px-4 pb-28 pt-4">
-        {tab === "home" && <RecyclerDashboard recyclerId={recyclerId} onGoTab={setTab} />}
-        {tab === "lots" && <RecyclerLots recyclerId={recyclerId} />}
+        {tab === "home" && <RecyclerDashboard recyclerId={recyclerId} bindingState={bindingState} onGoTab={setTab} />}
+        {tab === "lots" && <RecyclerLots recyclerId={recyclerId} bindingState={bindingState} />}
         {tab === "deals" && <RecyclerTransactions recyclerId={recyclerId} />}
         {tab === "quotes" && <RecyclerQuotes recyclerId={recyclerId} />}
-        {tab === "facility" && <RecyclerFacility recyclerId={recyclerId} />}
+        {tab === "facility" && <RecyclerFacility recyclerId={recyclerId} bindingState={bindingState} />}
       </main>
 
       {/* Bottom nav — recycler */}
@@ -184,9 +204,11 @@ export default function RecyclerApp() {
 
 function RecyclerDashboard({
   recyclerId,
+  bindingState,
   onGoTab,
 }: {
   recyclerId: Id<"recyclers"> | null;
+  bindingState: "ready" | "pending" | "unbound";
   onGoTab: (t: Tab) => void;
 }) {
   const { t } = useAppState();
@@ -206,11 +228,17 @@ function RecyclerDashboard({
         </p>
       </div>
 
-      {!recyclerId && (
-        <ClayCard className="rounded-3xl border-l-4 border-[var(--pending)]">
-          <p className="text-[13px] font-bold text-navy">Facility binding pending</p>
+      {bindingState !== "ready" && (
+        <ClayCard className="rounded-3xl border-l-4 border-[var(--gold)]">
+          <p className="text-[13px] font-bold text-navy">
+            {bindingState === "unbound"
+              ? "No facility linked to your account"
+              : "Finishing sign-in…"}
+          </p>
           <p className="mt-1 text-[12.5px] text-muted2">
-            Demo facility data is still syncing. Portal stats will appear here — no action needed.
+            {bindingState === "unbound"
+              ? "No facility linked to your account — set one up in Facility settings. Quoting stays disabled until a facility is linked. If you just signed in, re-login links the demo facility automatically."
+              : "Your account is still syncing with the cloud. The portal finishes loading automatically — nothing is lost."}
           </p>
         </ClayCard>
       )}
@@ -316,13 +344,57 @@ function RecyclerDashboard({
 
 /* ------------------------------ Facility -------------------------------- */
 
-function RecyclerFacility({ recyclerId }: { recyclerId: Id<"recyclers"> | null }) {
+function RecyclerFacility({
+  recyclerId,
+  bindingState,
+}: {
+  recyclerId: Id<"recyclers"> | null;
+  bindingState: "ready" | "pending" | "unbound";
+}) {
   const facility = useFacility(recyclerId ?? undefined); // offline-aware
   const { materials } = useMaterials();
   const { t } = useAppState();
+  const ensure = useMutation(api.profiles.ensureRecyclerBinding);
+  const [linking, setLinking] = useState(false);
 
+  // Sign-in still syncing: honest loading state, never a dead end.
+  if (bindingState === "pending" && facility === undefined) {
+    return <LoadingState label="Finishing sign-in…" />;
+  }
   if (facility === undefined) return <LoadingState label={t("common.loading")} />;
-  if (facility === null) return <p className="text-sm text-muted2">Facility not found.</p>;
+
+  // Confirmed no facility bound (or the bound record vanished): actionable
+  // repair — re-run the real binding mutation, no fake/default facility.
+  if (facility === null || (bindingState === "unbound" && !recyclerId)) {
+    return (
+      <div className="space-y-5">
+        <h1 className="text-2xl font-extrabold tracking-tight text-navy">Facility profile</h1>
+        <ClayCard className="rounded-3xl">
+          <p className="text-[15px] font-extrabold text-navy">No facility linked to your account</p>
+          <p className="mt-1 max-w-md text-[13px] leading-snug text-muted2">
+            Set up your facility to enable quoting and transactions. Re-login links the demo facility
+            automatically, or link it right now — your account details are kept.
+          </p>
+          <ClayButton
+            className="mt-3"
+            disabled={linking}
+            onClick={() => {
+              setLinking(true);
+              void ensure({})
+                .then((p) => {
+                  if (p?.recyclerId) pushToast("Facility linked — quoting is enabled", "success");
+                  else pushToast("Facility not available yet — try re-login", "error");
+                })
+                .catch(() => pushToast("Could not link facility — check connection", "error"))
+                .finally(() => setLinking(false));
+            }}
+          >
+            <BuildingIcon className="size-5" /> Link demo facility now
+          </ClayButton>
+        </ClayCard>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

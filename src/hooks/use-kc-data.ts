@@ -1,9 +1,9 @@
 import { useQuery, useMutation, useAction, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { cacheRecentPrices, getRecentPrices } from "@/lib/app-state";
+import { cacheRecentPrices, getRecentPrices, useAppState } from "@/lib/app-state";
 import { cachedOrUndefined, writeCache } from "@/lib/offline-cache";
 import {
   loadPendingProfile,
@@ -161,18 +161,23 @@ export function hasBackendId(
  */
 export function usePendingProfileSync() {
   const { signIn, signOut } = useAuthActions();
+  const { isAuthenticated } = useConvexAuth();
   const createProfile = useMutation(api.profiles.createProfile);
   useEffect(() => {
     const p = loadPendingProfile();
     if (!p || p.synced || !navigator.onLine) return;
     void (async () => {
       try {
-        try {
-          await signOut();
-        } catch {
-          /* no existing session — fine */
+        // Already signed in? Never destroy the live session — the backend
+        // createProfile dedupes onto the current user's account directly.
+        if (!isAuthenticated) {
+          try {
+            await signOut();
+          } catch {
+            /* no existing session — fine */
+          }
+          await signIn("anonymous");
         }
-        await signIn("anonymous");
         await createProfile({ role: p.role, name: p.name });
         markPendingProfileSynced();
       } catch {
@@ -190,13 +195,55 @@ export function usePendingProfileSync() {
  * Recyclers onboarded fully offline stay on their local profile (Pending Sync)
  * — no blocking, no error, matching the collector behaviour.
  */
-export function useRecyclerBindingRepair() {
+/**
+ * Repair a recycler profile whose facility binding is missing. Auth-timing
+ * safe: waits for the Convex session to hydrate (a mount-time run while auth
+ * was still resolving returned null on the server and silently no-oped — the
+ * root cause of the eternal "Facility binding still syncing" state), retries
+ * on network/seed races, and stops once bound. Pass `enabled: false` when no
+ * repair is needed so the hook stays idle.
+ */
+const MAX_BINDING_REPAIR_ATTEMPTS = 5;
+
+export function useRecyclerBindingRepair(options: { enabled?: boolean } = {}) {
+  const { isAuthenticated } = useConvexAuth();
+  const { online } = useAppState();
   const ensure = useMutation(api.profiles.ensureRecyclerBinding);
+  const [attempts, setAttempts] = useState(0);
+  const [tick, setTick] = useState(0);
+
   useEffect(() => {
-    if (!navigator.onLine) return;
-    void ensure({}).catch(() => undefined);
+    if (options.enabled === false) return;
+    if (!isAuthenticated || !online) return;
+    if (attempts >= MAX_BINDING_REPAIR_ATTEMPTS) return;
+    let cancelled = false;
+    const timer = window.setTimeout(
+      () => {
+        void (async () => {
+          try {
+            const p = await ensure({});
+            if (!cancelled && p && !p.recyclerId) {
+              // Profile still unbound (facility seed may not have landed yet):
+              // retry with backoff instead of giving up silently.
+              setAttempts((a) => a + 1);
+              setTick((t) => t + 1);
+            }
+          } catch {
+            if (!cancelled) {
+              setAttempts((a) => a + 1);
+              setTick((t) => t + 1);
+            }
+          }
+        })();
+      },
+      attempts === 0 ? 0 : 3000,
+    );
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [options.enabled, isAuthenticated, online, attempts, tick]);
 }
 
 /** Material catalogue; caches the latest copy for offline reads. */
