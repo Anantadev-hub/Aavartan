@@ -159,33 +159,68 @@ export function hasBackendId(
  * by the app shells; when the backend is reachable the pending profile is
  * created and marked synced — otherwise it silently stays "Pending Sync".
  */
+/**
+ * Opportunistic background sync for a locally onboarded profile. REACTIVE, not
+ * one-shot: it waits for auth hydration (a mount-time run while the session
+ * was still resolving read the stale `isAuthenticated=false`, signed OUT the
+ * live session and replaced it with a fresh anonymous user — the root cause of
+ * "Sign in required" on authenticated mutations and of a permanently stuck
+ * "pending-sync" phase) and retries with backoff until the backend record
+ * exists. It NEVER destroys a verified session: when already authenticated it
+ * calls createProfile directly and the backend dedupes onto that identity.
+ */
+const MAX_PENDING_SYNC_ATTEMPTS = 5;
+
 export function usePendingProfileSync() {
   const { signIn, signOut } = useAuthActions();
-  const { isAuthenticated } = useConvexAuth();
+  const { isLoading, isAuthenticated } = useConvexAuth();
+  const { online } = useAppState();
   const createProfile = useMutation(api.profiles.createProfile);
+  const [attempts, setAttempts] = useState(0);
+  const [tick, setTick] = useState(0);
+
   useEffect(() => {
     const p = loadPendingProfile();
-    if (!p || p.synced || !navigator.onLine) return;
-    void (async () => {
-      try {
-        // Already signed in? Never destroy the live session — the backend
-        // createProfile dedupes onto the current user's account directly.
-        if (!isAuthenticated) {
+    if (!p || p.synced) return;
+    if (!online) return;
+    if (isLoading) return; // auth hydrating — wait, never act on a stale flag
+    if (!isAuthenticated && attempts >= MAX_PENDING_SYNC_ATTEMPTS) return;
+    let cancelled = false;
+    const timer = window.setTimeout(
+      () => {
+        void (async () => {
           try {
-            await signOut();
+            // Only sign in when there is genuinely NO session. Signing out a
+            // live (possibly still-hydrating) session destroyed the user's
+            // real identity and orphaned their profile binding.
+            if (!isAuthenticated) {
+              try {
+                await signOut();
+              } catch {
+                /* no existing session — fine */
+              }
+              await signIn("anonymous");
+            }
+            await createProfile({ role: p.role, name: p.name });
+            if (!cancelled) markPendingProfileSynced();
           } catch {
-            /* no existing session — fine */
+            // Backend unreachable or transient failure: retry with backoff —
+            // never leave the profile (and every dependent query) stuck.
+            if (!cancelled) {
+              setAttempts((a) => a + 1);
+              setTick((t) => t + 1);
+            }
           }
-          await signIn("anonymous");
-        }
-        await createProfile({ role: p.role, name: p.name });
-        markPendingProfileSynced();
-      } catch {
-        /* backend unreachable — profile stays pending; never blocks the UI */
-      }
-    })();
+        })();
+      },
+      attempts === 0 ? 0 : 3000,
+    );
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isLoading, isAuthenticated, online, attempts, tick]);
 }
 
 /**

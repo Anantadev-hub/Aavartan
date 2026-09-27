@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
@@ -159,7 +159,7 @@ export default function RecyclerApp() {
         {tab === "home" && <RecyclerDashboard recyclerId={recyclerId} bindingState={bindingState} onGoTab={setTab} />}
         {tab === "lots" && <RecyclerLots recyclerId={recyclerId} bindingState={bindingState} />}
         {tab === "deals" && <RecyclerTransactions recyclerId={recyclerId} />}
-        {tab === "quotes" && <RecyclerQuotes recyclerId={recyclerId} />}
+        {tab === "quotes" && <RecyclerQuotes recyclerId={recyclerId} bindingState={bindingState} />}
         {tab === "facility" && <RecyclerFacility recyclerId={recyclerId} bindingState={bindingState} />}
       </main>
 
@@ -344,6 +344,16 @@ function RecyclerDashboard({
 
 /* ------------------------------ Facility -------------------------------- */
 
+const FACILITY_MATERIAL_OPTIONS = [
+  { code: "pcb", label: "PCB" },
+  { code: "lcd", label: "LCD" },
+  { code: "crt", label: "CRT" },
+  { code: "cable", label: "Cables" },
+  { code: "battery", label: "Batteries" },
+  { code: "motor", label: "Motors" },
+  { code: "plastic", label: "Mixed Plastics" },
+];
+
 function RecyclerFacility({
   recyclerId,
   bindingState,
@@ -351,21 +361,76 @@ function RecyclerFacility({
   recyclerId: Id<"recyclers"> | null;
   bindingState: "ready" | "pending" | "unbound";
 }) {
-  const facility = useFacility(recyclerId ?? undefined); // offline-aware
-  const { materials } = useMaterials();
   const { t } = useAppState();
+  // Read through the AUTH-AWARE facility query (resolves the signed-in
+  // identity server-side); recyclerId prop is display-only now.
+  const myFacilityDoc = useQuery(api.facility.myFacility, {});
+  const facility = useFacility(recyclerId ?? undefined); // offline-aware mirror
+  const { materials } = useMaterials();
   const ensure = useMutation(api.profiles.ensureRecyclerBinding);
+  const save = useMutation(api.facility.updateMyFacility);
   const [linking, setLinking] = useState(false);
 
+  // Editable form state, seeded from the loaded facility.
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<{
+    name: string; address: string; city: string; contact: string;
+    serviceArea: string; timingNote: string; pickupAvailable: boolean;
+    materials: string[];
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [savedTick, setSavedTick] = useState(0);
+
+  const doc = myFacilityDoc ?? (recyclerId ? facility : null);
+
+  const startEdit = (f: NonNullable<typeof doc>) =>
+    setForm({
+      name: f.name,
+      address: f.address,
+      city: f.city,
+      contact: f.contact,
+      serviceArea: f.serviceArea,
+      timingNote: f.timingNote,
+      pickupAvailable: f.pickupAvailable,
+      materials: [...f.materialsAccepted],
+    });
+
+  const saveEdits = () => {
+    if (!form) return;
+    setBusy(true);
+    save({
+      name: form.name,
+      address: form.address,
+      city: form.city,
+      contact: form.contact,
+      serviceArea: form.serviceArea,
+      timingNote: form.timingNote,
+      pickupAvailable: form.pickupAvailable,
+      materialsAccepted: form.materials,
+    })
+      .then(() => {
+        pushToast("Facility details saved", "success");
+        setEditing(false);
+        setForm(null);
+        setSavedTick((n) => n + 1); // re-seed the form from fresh backend state
+      })
+      .catch((e) => {
+        // Show the real failure, keep the original error in the console log.
+        console.error("[facility] update failed:", e);
+        pushToast(e instanceof Error ? e.message : "Could not save facility details", "error");
+      })
+      .finally(() => setBusy(false));
+  };
+
   // Sign-in still syncing: honest loading state, never a dead end.
-  if (bindingState === "pending" && facility === undefined) {
+  if (bindingState === "pending" && doc === undefined) {
     return <LoadingState label="Finishing sign-in…" />;
   }
-  if (facility === undefined) return <LoadingState label={t("common.loading")} />;
+  if (doc === undefined) return <LoadingState label={t("common.loading")} />;
 
   // Confirmed no facility bound (or the bound record vanished): actionable
   // repair — re-run the real binding mutation, no fake/default facility.
-  if (facility === null || (bindingState === "unbound" && !recyclerId)) {
+  if (doc === null || (bindingState === "unbound" && !recyclerId)) {
     return (
       <div className="space-y-5">
         <h1 className="text-2xl font-extrabold tracking-tight text-navy">Facility profile</h1>
@@ -396,11 +461,31 @@ function RecyclerFacility({
     );
   }
 
+  // Form display value: edits while editing, otherwise a view of the doc.
+  const seed: NonNullable<typeof doc> = doc;
+  const shown = form ?? {
+    name: seed.name,
+    address: seed.address,
+    city: seed.city,
+    contact: seed.contact,
+    serviceArea: seed.serviceArea,
+    timingNote: seed.timingNote,
+    pickupAvailable: seed.pickupAvailable,
+    materials: [...seed.materialsAccepted],
+  };
+
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-navy">Facility profile</h1>
-        <p className="mt-1 text-sm text-muted2">Your registered facility and accepted materials.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-navy">Facility profile</h1>
+          <p className="mt-1 text-sm text-muted2">Your registered facility and accepted materials.</p>
+        </div>
+        {!editing && (
+          <ClayButton size="sm" variant="surface" onClick={() => startEdit(seed)}>
+            Edit
+          </ClayButton>
+        )}
       </div>
 
       <ClayCard className="rounded-3xl">
@@ -409,52 +494,159 @@ function RecyclerFacility({
             <BuildingIcon className="size-6" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-extrabold text-navy">{facility.name}</p>
-            <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted2">
-              <MapPinIcon className="size-4 shrink-0" /> {facility.address}, {facility.area},{" "}
-              {facility.city}
-            </p>
-            <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted2">
-              <PhoneIcon className="size-4 shrink-0" /> {facility.contact}
-            </p>
+            {editing ? (
+              <div className="space-y-2">
+                <input
+                  value={shown.name}
+                  onChange={(e) => setForm({ ...shown, name: e.target.value })}
+                  className="w-full rounded-xl bg-muted px-3 py-2 text-[15px] font-extrabold text-navy outline-none"
+                  aria-label="Facility name"
+                />
+                <input
+                  value={shown.address}
+                  onChange={(e) => setForm({ ...shown, address: e.target.value })}
+                  placeholder="Address"
+                  className="w-full rounded-xl bg-muted px-3 py-2 text-[13px] text-navy outline-none"
+                  aria-label="Address"
+                />
+                <input
+                  value={shown.city}
+                  onChange={(e) => setForm({ ...shown, city: e.target.value })}
+                  placeholder="City"
+                  className="w-full rounded-xl bg-muted px-3 py-2 text-[13px] text-navy outline-none"
+                  aria-label="City"
+                />
+                <input
+                  value={shown.contact}
+                  onChange={(e) => setForm({ ...shown, contact: e.target.value })}
+                  placeholder="Contact"
+                  className="w-full rounded-xl bg-muted px-3 py-2 text-[13px] text-navy outline-none"
+                  aria-label="Contact"
+                />
+                <input
+                  value={shown.serviceArea}
+                  onChange={(e) => setForm({ ...shown, serviceArea: e.target.value })}
+                  placeholder="Service area"
+                  className="w-full rounded-xl bg-muted px-3 py-2 text-[13px] text-navy outline-none"
+                  aria-label="Service area"
+                />
+                <input
+                  value={shown.timingNote}
+                  onChange={(e) => setForm({ ...shown, timingNote: e.target.value })}
+                  placeholder="Operating hours"
+                  className="w-full rounded-xl bg-muted px-3 py-2 text-[13px] text-navy outline-none"
+                  aria-label="Operating hours"
+                />
+                <label className="flex items-center gap-2 text-[13px] font-semibold text-navy">
+                  <input
+                    type="checkbox"
+                    checked={shown.pickupAvailable}
+                    onChange={(e) => setForm({ ...shown, pickupAvailable: e.target.checked })}
+                  />
+                  Pickup available
+                </label>
+                <div>
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-muted2">
+                    Accepted materials
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {FACILITY_MATERIAL_OPTIONS.map((m) => {
+                      const on = shown.materials.includes(m.code);
+                      return (
+                        <button
+                          key={m.code}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() =>
+                            setForm({
+                              ...shown,
+                              materials: on
+                                ? shown.materials.filter((x) => x !== m.code)
+                                : [...shown.materials, m.code],
+                            })
+                          }
+                          className={cn(
+                            "rounded-full px-3 py-1.5 text-[12px] font-bold clay-pressable",
+                            on ? "bg-navy text-white" : "bg-muted text-muted2",
+                          )}
+                        >
+                          {m.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <ClayButton size="sm" disabled={busy} onClick={saveEdits}>
+                    Save
+                  </ClayButton>
+                  <ClayButton
+                    size="sm"
+                    variant="surface"
+                    disabled={busy}
+                    onClick={() => {
+                      setEditing(false);
+                      setForm(null);
+                    }}
+                  >
+                    Cancel
+                  </ClayButton>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-lg font-extrabold text-navy">{seed.name}</p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted2">
+                  <MapPinIcon className="size-4 shrink-0" /> {seed.address}, {seed.area}, {seed.city}
+                </p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted2">
+                  <PhoneIcon className="size-4 shrink-0" /> {seed.contact}
+                </p>
+              </>
+            )}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <ClayBadge tone={facility.verified ? "green" : "amber"}>
+          <ClayBadge tone={seed.verified ? "green" : "amber"}>
             <ShieldCheckIcon className="size-3.5" /> Authorization verified (demo)
           </ClayBadge>
           <ClayBadge tone="gold">
-            <StarIcon className="size-3.5" /> {facility.rating} rating
+            <StarIcon className="size-3.5" /> {seed.rating} rating
           </ClayBadge>
-          {facility.pickupAvailable && (
+          {(editing ? shown.pickupAvailable : seed.pickupAvailable) && (
             <ClayBadge tone="teal">
-              <TruckIcon className="size-3.5" /> Pickup · {facility.pickupRadiusKm} km radius
+              <TruckIcon className="size-3.5" /> Pickup · {seed.pickupRadiusKm} km radius
             </ClayBadge>
           )}
         </div>
-        <p className="mt-3 rounded-2xl bg-muted px-3.5 py-2.5 text-[12.5px] text-muted2">
-          {facility.serviceArea} · {facility.timingNote}
-        </p>
+        {!editing && (
+          <p className="mt-3 rounded-2xl bg-muted px-3.5 py-2.5 text-[12.5px] text-muted2">
+            {seed.serviceArea} · {seed.timingNote}
+          </p>
+        )}
         <p className="mt-2 text-[11px] text-muted2">
           Demo authorization status — no real CPCB registration IDs are used in this prototype.
+          {savedTick > 0 && " Saved changes persist to your cloud account."}
         </p>
       </ClayCard>
 
-      <ClayCard className="rounded-3xl">
-        <p className="text-[13px] font-bold uppercase tracking-wide text-muted2">Accepted materials & rates</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {facility.materialsAccepted.map((code) => {
-            const m = materials?.find((x) => x.code === code);
-            const rate = facility.rates[code] ?? m?.currentPrice ?? 0;
-            return (
-              <div key={code} className="clay-sm flex items-center justify-between rounded-2xl px-3.5 py-2.5">
-                <span className="text-[13.5px] font-bold text-navy">{m?.name ?? code}</span>
-                <span className="text-[13.5px] font-extrabold text-teal-deep">{formatINR(rate)}/kg</span>
-              </div>
-            );
-          })}
-        </div>
-      </ClayCard>
+      {!editing && (
+        <ClayCard className="rounded-3xl">
+          <p className="text-[13px] font-bold uppercase tracking-wide text-muted2">Accepted materials & rates</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {seed.materialsAccepted.map((code: string) => {
+              const m = materials?.find((x) => x.code === code);
+              const rate = seed.rates[code] ?? m?.currentPrice ?? 0;
+              return (
+                <div key={code} className="clay-sm flex items-center justify-between rounded-2xl px-3.5 py-2.5">
+                  <span className="text-[13.5px] font-bold text-navy">{m?.name ?? code}</span>
+                  <span className="text-[13.5px] font-extrabold text-teal-deep">{formatINR(rate)}/kg</span>
+                </div>
+              );
+            })}
+          </div>
+        </ClayCard>
+      )}
     </div>
   );
 }

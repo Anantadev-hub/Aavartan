@@ -16,7 +16,13 @@ import type { Id } from "@/convex/_generated/dataModel";
 // feed the price-discovery engine (median → Price Board reference).
 // ---------------------------------------------------------------------------
 
-export default function RecyclerQuotes({ recyclerId }: { recyclerId: string | null }) {
+export default function RecyclerQuotes({
+  recyclerId,
+  bindingState = "pending",
+}: {
+  recyclerId: string | null;
+  bindingState?: "ready" | "pending" | "unbound";
+}) {
   const { t, toast } = useAppState();
   const quotes = useMyQuotes();
   const facility = useFacility(recyclerId ? (recyclerId as never) : undefined);
@@ -65,10 +71,16 @@ export default function RecyclerQuotes({ recyclerId }: { recyclerId: string | nu
       </div>
 
       {!recyclerId && (
-        <ClayCard className="rounded-3xl border-l-4 border-[var(--pending)]">
-          <p className="text-[13px] font-bold text-navy">Facility binding pending</p>
+        <ClayCard className="rounded-3xl border-l-4 border-[var(--gold)]">
+          <p className="text-[13px] font-bold text-navy">
+            {bindingState === "unbound"
+              ? "No facility linked to your account"
+              : "Finishing sign-in…"}
+          </p>
           <p className="mt-1 text-[12.5px] text-muted2">
-            Quotes unlock as soon as your facility binding syncs — no action needed.
+            {bindingState === "unbound"
+              ? "No facility linked to your account — set one up in Facility settings. Quote publishing unlocks as soon as a facility is linked."
+              : "Quote publishing unlocks automatically when your account finishes syncing."}
           </p>
         </ClayCard>
       )}
