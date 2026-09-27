@@ -100,6 +100,16 @@ const en: Dict = {
   "status.handed_over": "Handed over",
   "status.completed": "Completed",
   "status.draft": "Draft",
+  "pool.title": "Smart Scrap Pooling",
+  "pool.findNearby": "Find Nearby Collectors",
+  "pool.create": "Create Pool",
+  "pool.join": "Join Pool",
+  "pool.leave": "Leave Pool",
+  "pool.myPools": "My Active Pools",
+  "pool.nearby": "Nearby Pool Opportunities",
+  "pool.contributions": "My Contributions",
+  "pool.completed": "Completed Pools",
+  "pool.subtitle": "Have a small quantity? Pool with nearby collectors.",
 };
 
 const hi: Dict = {
@@ -188,6 +198,16 @@ const hi: Dict = {
   "status.handed_over": "हैंडओवर पूरा",
   "status.completed": "पूर्ण",
   "status.draft": "ड्राफ़्ट",
+  "pool.title": "स्मार्ट स्क्रैप पूलिंग",
+  "pool.findNearby": "आस-पास के कलेक्टर खोजें",
+  "pool.create": "पूल बनाएँ",
+  "pool.join": "पूल जॉइन करें",
+  "pool.leave": "पूल छोड़ें",
+  "pool.myPools": "मेरे सक्रिय पूल",
+  "pool.nearby": "आस-पास के पूल अवसर",
+  "pool.contributions": "मेरे योगदान",
+  "pool.completed": "पूर्ण हुए पूल",
+  "pool.subtitle": "कम मात्रा है? आस-पास के कलेक्टरों के साथ पूल करें।",
 };
 
 const mr: Dict = {
@@ -276,6 +296,16 @@ const mr: Dict = {
   "status.handed_over": "हॅंडओव्हर पूर्ण",
   "status.completed": "पूर्ण",
   "status.draft": "मसुदा",
+  "pool.title": "स्मार्ट स्क्रॅप पूलिंग",
+  "pool.findNearby": "जवळपासचे कलेक्टर शोधा",
+  "pool.create": "पूल तयार करा",
+  "pool.join": "पूलमध्ये सामील व्हा",
+  "pool.leave": "पूल सोडा",
+  "pool.myPools": "माझे सक्रिय पूल",
+  "pool.nearby": "जवळपासचे संधी",
+  "pool.contributions": "माझे योगदान",
+  "pool.completed": "पूर्ण झालेले पूल",
+  "pool.subtitle": "कमी प्रमाण आहे? जवळपासच्या कलेक्टरांसोबत पूल करा.",
 };
 
 const DICTS: Record<Lang, Dict> = { en, hi, mr };

@@ -452,5 +452,150 @@ route("/api/sync", "POST", httpAction(async (ctx, req) => {
   }
 }));
 
+// ---- Part 1: Price discovery (recycler quotes) -------------------------------
+// Quote submission is authenticated: it reuses the demo-session bearer token
+// issued by /api/auth/verify-otp. The server re-checks role/facility.
+
+route("/api/prices/recycler-quotes", "POST", httpAction(async (ctx, req) => {
+  const session = sessionFrom(req);
+  if (!session) return bad("Authentication required", 401);
+  const body = (await req.json().catch(() => ({}))) as {
+    materialCode?: string; pricePerKg?: number; grade?: string;
+    minimumQuantityKg?: number; maximumQuantityKg?: number;
+    pickupAvailable?: boolean; serviceArea?: string; validDays?: number;
+  };
+  if (!body.materialCode || typeof body.pricePerKg !== "number") {
+    return bad("materialCode and pricePerKg required", 400);
+  }
+  try {
+    const res = await ctx.runMutation(api.discovery.submitQuote, {
+      materialCode: body.materialCode,
+      pricePerKg: body.pricePerKg,
+      grade: body.grade,
+      minimumQuantityKg: typeof body.minimumQuantityKg === "number" ? body.minimumQuantityKg : 0,
+      maximumQuantityKg: body.maximumQuantityKg,
+      pickupAvailable: body.pickupAvailable === true,
+      serviceArea: body.serviceArea ?? "Delhi/NCR",
+      validDays: body.validDays,
+    });
+    return json({ success: true, ...res });
+  } catch (e) {
+    return bad(e instanceof Error ? e.message : "Quote rejected", 403);
+  }
+}));
+
+route("/api/prices/recycler-quotes/", "GET", httpAction(async (ctx, req) => {
+  const parts = new URL(req.url).pathname.split("/").filter(Boolean);
+  const materialCode = (parts[3] ?? "").toLowerCase().replace(/\/+$/, "");
+  if (!materialCode) return bad("material code required", 400);
+  const quotes = await ctx.runQuery(api.discovery.activeQuotesForMaterial, { materialCode });
+  return json({ success: true, materialCode, quotes });
+}), { prefix: true });
+
+route("/api/prices/discovery/", "GET", httpAction(async (ctx, req) => {
+  const parts = new URL(req.url).pathname.split("/").filter(Boolean);
+  const materialCode = (parts[3] ?? "").toLowerCase().replace(/\/+$/, "");
+  if (!materialCode) return bad("material code required", 400);
+  const discovery = await ctx.runQuery(api.discovery.getDiscovery, { materialCode });
+  if (!discovery) return bad("No discovery snapshot for material", 404);
+  return json({ success: true, discovery });
+}), { prefix: true });
+
+// ---- Part 2: Smart Scrap Pooling (§22) ----------------------------------------
+// All pooling mutations are demo-session authenticated and identity-checked
+// server-side. The HTTP surface mirrors the Convex functions 1:1.
+
+route("/api/pooling/nearby", "GET", httpAction(async (ctx, req) => {
+  const url = new URL(req.url);
+  const session = sessionFrom(req);
+  if (!session) return bad("Authentication required", 401);
+  const materialCode = url.searchParams.get("materialCode") ?? undefined;
+  const collectors = await ctx.runQuery(api.pooling.nearbyCollectors, {
+    materialCode: materialCode ?? "pcb",
+  });
+  const pools = await ctx.runQuery(api.pooling.nearbyPools, { materialCode });
+  return json({ success: true, collectors, pools });
+}));
+
+route("/api/pooling", "GET", httpAction(async (ctx, req) => {
+  if (!sessionFrom(req)) return bad("Authentication required", 401);
+  const [mine, contributions] = await Promise.all([
+    ctx.runQuery(api.pooling.myPools, {}),
+    ctx.runQuery(api.pooling.myContributions, {}),
+  ]);
+  return json({ success: true, pools: mine, contributions });
+}));
+
+route("/api/pooling", "POST", httpAction(async (ctx, req) => {
+  if (!sessionFrom(req)) return bad("Authentication required", 401);
+  const body = (await req.json().catch(() => ({}))) as {
+    lotId?: string; targetQuantityKg?: number; pickupWindow?: string;
+    transportCostEstimate?: number;
+  };
+  if (!body.lotId || typeof body.targetQuantityKg !== "number") {
+    return bad("lotId and targetQuantityKg required", 400);
+  }
+  try {
+    const res = await ctx.runMutation(api.pooling.createPool, {
+      lotId: body.lotId as never,
+      targetQuantityKg: body.targetQuantityKg,
+      pickupWindow: body.pickupWindow ?? "Flexible",
+      transportCostEstimate: body.transportCostEstimate,
+    });
+    return json({ success: true, ...res });
+  } catch (e) {
+    return bad(e instanceof Error ? e.message : "Could not create pool", 400);
+  }
+}));
+
+route("/api/pooling/", "GET", httpAction(async (ctx, req) => {
+  const parts = new URL(req.url).pathname.split("/").filter(Boolean);
+  const poolId = parts[2];
+  if (!poolId) return bad("pool id required", 400);
+  if (!sessionFrom(req)) return bad("Authentication required", 401);
+  const pool = await ctx.runQuery(api.pooling.getPool, { poolId: poolId as never });
+  if (!pool) return bad("Pool not found", 404);
+  return json({ success: true, pool });
+}), { prefix: true });
+
+route("/api/pooling/", "POST", httpAction(async (ctx, req) => {
+  const parts = new URL(req.url).pathname.split("/").filter(Boolean);
+  const poolId = parts[2];
+  const action = parts[3]; // join | leave | contribution | match-recyclers | complete
+  if (!poolId || !action) return bad("pool id and action required", 400);
+  if (!sessionFrom(req)) return bad("Authentication required", 401);
+  const body = (await req.json().catch(() => ({}))) as {
+    lotId?: string; recyclerId?: string; pickupWindow?: string;
+    transportCost?: number; individualKg?: number;
+  };
+  try {
+    switch (action) {
+      case "join": {
+        if (!body.lotId) return bad("lotId required", 400);
+        const res = await ctx.runMutation(api.pooling.joinPool, {
+          poolId: poolId as never, lotId: body.lotId as never,
+        });
+        return json({ success: true, ...res });
+      }
+      case "leave": {
+        const res = await ctx.runMutation(api.pooling.leavePool, { poolId: poolId as never });
+        return json({ success: true, ...res });
+      }
+      case "match-recyclers": {
+        const res = await ctx.runQuery(api.pooling.matchRecyclersForPool, { poolId: poolId as never });
+        return json({ success: true, ...res });
+      }
+      case "complete": {
+        const res = await ctx.runMutation(api.pooling.completePool, { poolId: poolId as never });
+        return json({ success: true, ...res });
+      }
+      default:
+        return bad("Unknown pool action", 400);
+    }
+  } catch (e) {
+    return bad(e instanceof Error ? e.message : "Pool action failed", 400);
+  }
+}), { prefix: true });
+
 export { restRoutes };
 export default http;

@@ -10,6 +10,7 @@ import { type MutationCtx, internalMutation, mutation } from "./_generated/serve
 // ---------------------------------------------------------------------------
 
 import { internal } from "./_generated/api";
+import { geohashEncode } from "./pooling";
 
 function mulberry32(seed: number) {
   return function () {
@@ -313,6 +314,8 @@ export const seedAllInternal = internalMutation({
   handler: async (ctx) => {
     await insertBaseData(ctx);
     await ctx.runMutation(internal.pricing.seedMarketPricesIfEmpty, {});
+    await ctx.runMutation(internal.seed.seedPoolingDemo, {});
+    await ctx.runMutation(internal.seed.seedDemoQuotes, {});
     await ctx.runMutation(internal.seed.seedDemoActivity, {});
     return { seeded: true };
   },
@@ -322,6 +325,161 @@ export const seedAllInternal = internalMutation({
 async function ensureMarketPrices(ctx: MutationCtx) {
   await ctx.runMutation(internal.pricing.seedMarketPricesIfEmpty, {});
 }
+
+// ---- §24 demo recycler quotes -----------------------------------------------
+// Buying quotes from the SEEDED DEMO facilities so price discovery shows a
+// real range/median. Facilities in this prototype are demo entities; quote
+// service areas carry an explicit "(demo)" marker.
+const DEMO_QUOTES = [
+  { facility: "GreenCycle Recycling", materialCode: "pcb", pricePerKg: 415, min: 25 },
+  { facility: "Delhi E-Waste Solutions", materialCode: "pcb", pricePerKg: 408, min: 20 },
+  { facility: "NCR Metal Reclaimers", materialCode: "pcb", pricePerKg: 402, min: 30 },
+  { facility: "GreenCycle Recycling", materialCode: "cable", pricePerKg: 330, min: 20 },
+  { facility: "Delhi E-Waste Solutions", materialCode: "cable", pricePerKg: 336, min: 15 },
+  { facility: "GreenCycle Recycling", materialCode: "battery", pricePerKg: 140, min: 40 },
+];
+
+export const seedDemoQuotes = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const existing = await ctx.db.query("recyclerQuotes").first();
+    if (existing !== null) return { seeded: false };
+    const now = Date.now();
+    for (const q of DEMO_QUOTES) {
+      const facility = await ctx.db
+        .query("recyclers")
+        .withIndex("by_name", (x) => x.eq("name", q.facility))
+        .unique();
+      if (!facility) continue;
+      await ctx.db.insert("recyclerQuotes", {
+        recyclerId: facility._id,
+        materialCode: q.materialCode,
+        pricePerKg: q.pricePerKg,
+        grade: "Standard",
+        minimumQuantityKg: q.min,
+        pickupAvailable: facility.pickupAvailable,
+        serviceArea: `${facility.serviceArea} (demo)`,
+        quoteStatus: "ACTIVE",
+        validFrom: now - 3_600_000,
+        validUntil: now + 7 * 86_400_000,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    // Recompute discovery snapshots so the board reflects the quotes.
+    await ctx.runMutation(internal.discovery.recomputeAllSnapshots, {});
+    return { seeded: true, quotes: DEMO_QUOTES.length };
+  },
+});
+
+// ---- §24 demo pooling data ---------------------------------------------------
+// Clearly-labelled DEMO collectors/locations/pools so the Smart Scrap Pooling
+// screens demonstrate with realistic data. Every record is visibly marked
+// "(demo)" — fabricated people are never presented as real field participants,
+// and all coordinates are approximate area-level points.
+
+const DEMO_POOL_COLLECTORS = [
+  { name: "Demo Collector A (demo)", locality: "Lajpat Nagar (demo)", lat: 28.5677, lng: 77.2432 },
+  { name: "Demo Collector B (demo)", locality: "Greater Kailash (demo)", lat: 28.5494, lng: 77.242 },
+  { name: "Demo Collector C (demo)", locality: "Seelampur (demo)", lat: 28.6702, lng: 77.2669 },
+];
+
+export const seedPoolingDemo = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const existingLoc = await ctx.db.query("collectorLocations").first();
+    if (existingLoc !== null) return { seeded: false };
+    const now = Date.now();
+    let owner = await ctx.db.query("users").first();
+    if (!owner) {
+      const userId = await ctx.db.insert("users", { name: "Demo Owner (demo)", isAnonymous: true });
+      owner = await ctx.db.get(userId);
+    }
+    // Highest existing lot/pool numbering continues (no collisions).
+    let lotNum = 0;
+    for (const l of await ctx.db.query("lots").collect()) {
+      const n = Number(l.referenceId.split("-").pop());
+      if (Number.isFinite(n) && n > lotNum) lotNum = n;
+    }
+    let poolNum = 0;
+    for (const p of await ctx.db.query("pools").collect()) {
+      const n = Number(p.poolRef.split("-").pop());
+      if (Number.isFinite(n) && n > poolNum) poolNum = n;
+    }
+
+    const created: Array<{ profileId: string; name: string; locality: string; lat: number; lng: number }> = [];
+    for (const c of DEMO_POOL_COLLECTORS) {
+      const profileId = await ctx.db.insert("profiles", {
+        userId: owner!._id as never,
+        role: "collector",
+        name: c.name,
+        phone: `(demo) ${c.name}`,
+        collectionArea: c.locality,
+        createdAt: now - 10 * 86_400_000,
+      });
+      await ctx.db.insert("collectorLocations", {
+        collectorId: profileId as never,
+        approximateLatitude: c.lat,
+        approximateLongitude: c.lng,
+        geohash: geohashEncode(c.lat, c.lng, 5),
+        geohashPrecision: 5,
+        locality: c.locality,
+        locationUpdatedAt: now,
+        poolingOptIn: true,
+      });
+      created.push({ profileId, name: c.name, locality: c.locality, lat: c.lat, lng: c.lng });
+    }
+
+    // Two open demo pools with the creator's contribution lot each.
+    const demoPools = [
+      { owner: created[0], materialCode: "pcb", kg: 18, target: 50, area: "Lajpat Nagar (demo)", window: "Weekday mornings" },
+      { owner: created[1], materialCode: "cable", kg: 11, target: 40, area: "Greater Kailash (demo)", window: "Flexible" },
+    ];
+    for (const dp of demoPools) {
+      lotNum += 1;
+      const referenceId = `KC-2026-${String(lotNum).padStart(4, "0")}`;
+      const lotId = await ctx.db.insert("lots", {
+        referenceId,
+        collectorId: dp.owner.profileId as never,
+        materialCode: dp.materialCode,
+        weight: dp.kg,
+        condition: "good",
+        locationLabel: `${dp.area} (demo location)`,
+        estimatedValue: Math.round(dp.kg * 100), // demo board placeholder rate
+        status: "created",
+        paymentStatus: "none",
+        syncOrigin: "online",
+        createdAt: now - 86_400_000,
+        updatedAt: now - 86_400_000,
+      });
+      poolNum += 1;
+      const poolId = await ctx.db.insert("pools", {
+        poolRef: `POOL-KC-${String(poolNum).padStart(6, "0")}`,
+        creatorCollectorId: dp.owner.profileId as never,
+        materialCode: dp.materialCode,
+        grade: "Standard",
+        targetQuantityKg: dp.target,
+        currentQuantityKg: dp.kg,
+        status: "OPEN",
+        pickupWindow: dp.window,
+        approximateArea: dp.area,
+        geohash: geohashEncode(dp.owner.lat, dp.owner.lng, 5),
+        createdAt: now - 86_400_000,
+        updatedAt: now - 86_400_000,
+        expiresAt: now + 6 * 86_400_000,
+      });
+      await ctx.db.insert("poolContributions", {
+        poolId: poolId as never,
+        collectorId: dp.owner.profileId as never,
+        lotId: lotId as never,
+        quantityKg: dp.kg,
+        contributionStatus: "CONFIRMED",
+        joinedAt: now - 86_400_000,
+      });
+    }
+    return { seeded: true, collectors: created.length, pools: demoPools.length };
+  },
+});
 
 // Public bootstrap mutation: seeds once; safe to call from the client on app start.
 export const seedIfEmpty = mutation({
@@ -369,6 +527,10 @@ export const seedIfEmpty = mutation({
       // Market-price bootstrap (§6): on a deployment seeded before the
       // market table existed, ingest once so the board shows backend records.
       await ensureMarketPrices(ctx);
+      // §24 demo pooling data (labelled demo collectors/locations/pools)
+      // and demo recycler quotes for price discovery.
+      await ctx.runMutation(internal.seed.seedPoolingDemo, {});
+      await ctx.runMutation(internal.seed.seedDemoQuotes, {});
       // Top up the demo activity pipeline if absent.
       await ctx.runMutation(internal.seed.seedDemoActivity, {});
       return { seeded: false };

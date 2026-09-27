@@ -439,6 +439,261 @@ export function useRefreshPrices() {
   }, [refresh]);
 }
 
+// ---- Part 1: price discovery hooks ------------------------------------------
+
+export type DiscoveryRow = {
+  materialCode: string;
+  day: string;
+  pricePerKg: number;
+  pricingMethod: "recycler_quote_median" | "demo_fallback";
+  recyclerQuoteCount: number;
+  quoteRange: { low: number; high: number; median?: number } | null;
+  sourceKind: string;
+  sourceName: string;
+  sourceReference: string | null;
+  location: string;
+  recordedAt: number;
+  label: string;
+  isLiveMarketClaim: boolean;
+};
+
+/** Discovery board rows (median of valid recycler quotes or labelled demo). */
+export function useDiscoveryBoard() {
+  const live = useQuery(api.discovery.getDiscoveryBoard, {});
+  useEffect(() => {
+    if (live) writeCache("discovery.board", live);
+  }, [live]);
+  return live !== undefined
+    ? live
+    : cachedOrUndefined<DiscoveryRow[]>("discovery.board");
+}
+
+/** Active recycler quotes for one material (range + contributors). */
+export function useRecyclerQuotes(materialCode: string | undefined) {
+  const live = useQuery(
+    api.discovery.activeQuotesForMaterial,
+    materialCode ? { materialCode } : "skip",
+  );
+  const key = `quotes.${materialCode ?? "x"}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined
+    ? live
+    : cachedOrUndefined<Array<{
+        quoteId: string;
+        recyclerName: string;
+        pricePerKg: number;
+        grade: string;
+        minimumQuantityKg: number;
+        maximumQuantityKg: number | null;
+        pickupAvailable: boolean;
+        serviceArea: string;
+        validUntil: number;
+      }>>(key);
+}
+
+/** A recycler facility's own submitted quotes. */
+export function useMyQuotes() {
+  return useQuery(api.discovery.myQuotes, {});
+}
+
+// ---- Part 2: Smart Scrap Pooling hooks ---------------------------------------
+
+export type MyPoolRow = {
+  _id: string;
+  poolRef: string;
+  materialCode: string;
+  grade: string;
+  status: string;
+  currentQuantityKg: number;
+  targetQuantityKg: number;
+  approximateArea: string;
+  pickupWindow: string;
+  transportCostEstimate: number | null;
+  contributors: number;
+  myContributionKg: number;
+  isCreator: boolean;
+  matchedRecyclerName: string | null;
+  createdAt: number;
+  expiresAt: number;
+};
+
+export function useMyPools() {
+  const live = useQuery(api.pooling.myPools, {});
+  useEffect(() => {
+    if (live) writeCache("pools.mine", live);
+  }, [live]);
+  return live !== undefined ? live : cachedOrUndefined<MyPoolRow[]>("pools.mine");
+}
+
+export type NearbyPoolRow = {
+  poolId: string;
+  poolRef: string;
+  materialCode: string;
+  grade: string;
+  currentQuantityKg: number;
+  targetQuantityKg: number;
+  contributors: number;
+  pickupWindow: string;
+  approximateArea: string;
+  approxDistanceKm: number | null;
+  status: string;
+  expiresAt: number;
+};
+
+export function useNearbyPools(materialCode?: string) {
+  const live = useQuery(api.pooling.nearbyPools, { materialCode });
+  const key = `pools.nearby.${materialCode ?? "all"}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined ? live : cachedOrUndefined<NearbyPoolRow[]>(key);
+}
+
+export type NearbyCollectorRow = {
+  displayName: string;
+  area: string;
+  approxDistanceKm: number | null;
+  openPools: Array<{
+    poolId: string;
+    poolRef: string;
+    materialCode: string;
+    currentQuantityKg: number;
+    targetQuantityKg: number;
+    pickupWindow: string;
+    approximateArea: string;
+    status: string;
+  }>;
+};
+
+export function useNearbyCollectors(materialCode: string | undefined) {
+  const live = useQuery(
+    api.pooling.nearbyCollectors,
+    materialCode ? { materialCode } : "skip",
+  );
+  const key = `collectors.nearby.${materialCode ?? "x"}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined ? live : cachedOrUndefined<NearbyCollectorRow[]>(key);
+}
+
+export function useMyContributions() {
+  const live = useQuery(api.pooling.myContributions, {});
+  useEffect(() => {
+    if (live) writeCache("pools.contributions", live);
+  }, [live]);
+  return live !== undefined
+    ? live
+    : cachedOrUndefined<Array<{
+        contributionId: string;
+        poolId: string;
+        poolRef: string;
+        poolStatus: string;
+        materialCode: string;
+        lotReferenceId: string;
+        quantityKg: number;
+        contributionStatus: string;
+        joinedAt: number;
+      }>>("pools.contributions");
+}
+
+export function usePoolDetail(poolId: string | undefined) {
+  const live = useQuery(
+    api.pooling.getPool,
+    poolId ? { poolId: poolId as never } : "skip",
+  );
+  const key = `pool.${poolId ?? "x"}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined ? live : cachedOrUndefined<MyPoolRow>(key);
+}
+
+export function usePoolRecyclerOptions(poolId: string | undefined) {
+  const live = useQuery(
+    api.pooling.matchRecyclersForPool,
+    poolId ? { poolId: poolId as never } : "skip",
+  );
+  const key = `poolOptions.${poolId ?? "x"}`;
+  useEffect(() => {
+    if (live) writeCache(key, live);
+  }, [live, key]);
+  return live !== undefined
+    ? live
+    : cachedOrUndefined<{
+        pool: { poolId: string; poolRef: string; materialCode: string; currentQuantityKg: number; targetQuantityKg: number; status: string };
+        options: Array<{
+          recyclerId: string;
+          recyclerName: string;
+          quotePerKg: number;
+          quoteIsLive: boolean;
+          minimumQuantityKg: number | null;
+          pickupAvailable: boolean;
+          serviceArea: string;
+          distanceKm: number;
+          validUntil: number | null;
+          estimatedValue: number;
+          meetsMinimum: boolean;
+        }>;
+      }>(key);
+}
+
+export type PoolNotification = {
+  _id: string;
+  poolId?: string | null;
+  type: string;
+  title: string;
+  body: string;
+  readAt?: number | null;
+  createdAt: number;
+};
+
+export function usePoolNotifications() {
+  const live = useQuery(api.pooling.myNotifications, {});
+  useEffect(() => {
+    if (live) writeCache("pools.notifications", live);
+  }, [live]);
+  return live !== undefined
+    ? live
+    : cachedOrUndefined<PoolNotification[]>("pools.notifications");
+}
+
+/** Submit a recycler buying quote (Part 1 §2; server-authorized). */
+export function useSubmitQuote() {
+  return useMutation(api.discovery.submitQuote);
+}
+
+// Pooling mutations (identity enforced server-side).
+export function useUpdateMyLocation() {
+  return useMutation(api.pooling.updateMyLocation);
+}
+export function useCreatePool() {
+  return useMutation(api.pooling.createPool);
+}
+export function useJoinPool() {
+  return useMutation(api.pooling.joinPool);
+}
+export function useLeavePool() {
+  return useMutation(api.pooling.leavePool);
+}
+export function useSaveTransportEstimate() {
+  return useMutation(api.pooling.saveTransportEstimate);
+}
+export function useMatchPoolToRecycler() {
+  return useMutation(api.pooling.matchPoolToRecycler);
+}
+export function useSchedulePickup() {
+  return useMutation(api.pooling.schedulePickup);
+}
+export function useCompletePool() {
+  return useMutation(api.pooling.completePool);
+}
+export function useMarkNotificationsRead() {
+  return useMutation(api.pooling.markNotificationsRead);
+}
+
 /** §11 weekly net earnings report (completed + paid lots only). */
 export function useWeeklyReport(collectorId: Id<"profiles"> | undefined) {
   const live = useQuery(api.lots.weeklyReport, collectorId ? { collectorId } : "skip");

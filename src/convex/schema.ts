@@ -18,6 +18,43 @@ export type Role = Infer<typeof roleValidator>;
 
 // ---- Kabadiwala Connect domain --------------------------------------------
 
+// Price source model (Part 1 §1). Four kinds, never mixed in presentation:
+//   demo               — clearly labelled simulated data (no live claim)
+//   recycler_quote     — a real authorized recycler's buying price
+//   commodity_reference— external benchmark/API price (future provider)
+//   reference_feed     — controlled backend adapter over a documented source
+export const PRICE_SOURCE_KINDS = [
+  "demo",
+  "recycler_quote",
+  "commodity_reference",
+  "reference_feed",
+] as const;
+export const priceSourceKindValidator = v.union(
+  ...PRICE_SOURCE_KINDS.map((k) => v.literal(k)),
+);
+
+export const RECYCLER_QUOTE_STATUSES = [
+  "ACTIVE", "PAUSED", "EXPIRED", "WITHDRAWN",
+] as const;
+export const recyclerQuoteStatusValidator = v.union(
+  ...RECYCLER_QUOTE_STATUSES.map((s) => v.literal(s)),
+);
+
+export const POOL_STATUSES = [
+  "OPEN", "FILLING", "TARGET_REACHED", "MATCHED_TO_RECYCLER",
+  "PICKUP_SCHEDULED", "COMPLETED", "CANCELLED", "EXPIRED",
+] as const;
+export const poolStatusValidator = v.union(
+  ...POOL_STATUSES.map((s) => v.literal(s)),
+);
+
+export const POOL_CONTRIBUTION_STATUSES = [
+  "PENDING", "CONFIRMED", "WITHDRAWN", "DELIVERED",
+] as const;
+export const poolContributionStatusValidator = v.union(
+  ...POOL_CONTRIBUTION_STATUSES.map((s) => v.literal(s)),
+);
+
 // UI-facing lot statuses (existing frontend contract — preserved).
 export const LOT_STATUSES = [
   "draft", // saved offline, not yet synced
@@ -194,6 +231,7 @@ const schema = defineSchema(
       priceRecordId: v.optional(v.id("dailyPrices")), // §9 which price row
       priceTimestamp: v.optional(v.number()), // §9 when that rate was recorded
       priceSource: v.optional(v.string()), // §9 provenance: provider name
+      priceSourceName: v.optional(v.string()), // §6: display name of the source
       priceSourceKind: v.optional(
         v.union(
           v.literal("api"),
@@ -201,8 +239,18 @@ const schema = defineSchema(
           v.literal("demo"),
           v.literal("manual"),
           v.literal("board-default"),
+          v.literal("recycler_quote"),
+          v.literal("commodity_reference"),
         ),
       ),
+      pricingMethod: v.optional(
+        v.union(
+          v.literal("recycler_quote_median"),
+          v.literal("demo_fallback"),
+          v.literal("board_default"),
+        ),
+      ),
+      recyclerQuoteCount: v.optional(v.number()), // §6: quotes behind the frozen price
       marketPriceId: v.optional(v.id("marketPrices")), // upstream market record
       quotedPrice: v.optional(v.number()), // ₹/kg quoted by recycler
       quotedAt: v.optional(v.number()),
@@ -369,6 +417,157 @@ const schema = defineSchema(
       lastSuccessAt: v.optional(v.number()),
       lastError: v.optional(v.string()),
     }),
+
+    // ---- Part 1: Recycler-quote price discovery ---------------------------
+
+    // Buying quotes submitted by authorized recyclers for materials they
+    // accept. Only ACTIVE quotes within their validity window participate in
+    // price discovery. A recycler may quote ONLY materials in materialsAccepted.
+    recyclerQuotes: defineTable({
+      recyclerId: v.id("recyclers"),
+      materialCode: v.string(),
+      pricePerKg: v.number(),
+      grade: v.string(), // "Standard" unless the recycler grades differently
+      minimumQuantityKg: v.number(),
+      maximumQuantityKg: v.optional(v.number()),
+      pickupAvailable: v.boolean(),
+      serviceArea: v.string(),
+      quoteStatus: recyclerQuoteStatusValidator,
+      validFrom: v.number(),
+      validUntil: v.number(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_material", ["materialCode"])
+      .index("by_recycler", ["recyclerId"])
+      .index("by_material_status", ["materialCode", "quoteStatus"]),
+
+    // Discovery snapshots — the computed market reference per material+day
+    // (median of valid recycler quotes; labelled fallback when none). Written
+    // only by the backend discovery engine / scheduled job.
+    priceSnapshots: defineTable({
+      materialCode: v.string(),
+      day: v.string(), // YYYY-MM-DD (UTC)
+      pricePerKg: v.number(),
+      pricingMethod: v.union(
+        v.literal("recycler_quote_median"),
+        v.literal("demo_fallback"),
+      ),
+      low: v.optional(v.number()),
+      high: v.optional(v.number()),
+      median: v.optional(v.number()),
+      recyclerQuoteCount: v.number(),
+      sourceKind: priceSourceKindValidator,
+      sourceName: v.string(),
+      sourceReference: v.optional(v.string()),
+      location: v.string(),
+      recordedAt: v.number(),
+      fetchedAt: v.number(),
+    })
+      .index("by_material_day", ["materialCode", "day"])
+      .index("by_material", ["materialCode"]),
+
+    // ---- Part 2: Smart Scrap Pooling ---------------------------------------
+
+    // Coarse, privacy-preserving collector location (§8). Stores an exact
+    // coordinate ONLY inside the backend as a matching input — every read
+    // model returns masked data (area label + approximate distance, never the
+    // raw lat/lng or geohash of another collector).
+    collectorLocations: defineTable({
+      collectorId: v.id("profiles"),
+      approximateLatitude: v.number(),
+      approximateLongitude: v.number(),
+      geohash: v.string(), // coarse bucket (default precision 5 ≈ 4.9km × 4.9km)
+      geohashPrecision: v.number(),
+      locality: v.string(),
+      pincode: v.optional(v.string()),
+      locationUpdatedAt: v.number(),
+      poolingOptIn: v.boolean(),
+    })
+      .index("by_collector", ["collectorId"])
+      .index("by_geohash", ["geohash"])
+      .index("by_optin", ["poolingOptIn"]),
+
+    // A collector's declared intent to pool surplus material (§9). Distinct
+    // from the pool itself; contributes to the nearby matching pool.
+    poolingRequests: defineTable({
+      collectorId: v.id("profiles"),
+      materialCode: v.string(),
+      quantityKg: v.number(),
+      grade: v.string(),
+      preferredRecyclerId: v.optional(v.id("recyclers")),
+      targetQuantityKg: v.number(),
+      pickupWindow: v.string(),
+      status: v.union(v.literal("OPEN"), v.literal("MATCHED"), v.literal("CLOSED")),
+      createdAt: v.number(),
+      expiresAt: v.number(),
+    })
+      .index("by_collector", ["collectorId"])
+      .index("by_material", ["materialCode"])
+      .index("by_status", ["status"]),
+
+    // The Pool entity (§11): aggregated compatible scrap before transport.
+    pools: defineTable({
+      poolRef: v.string(), // POOL-KC-XXXXXX
+      creatorCollectorId: v.id("profiles"),
+      materialCode: v.string(),
+      grade: v.string(),
+      targetQuantityKg: v.number(),
+      currentQuantityKg: v.number(),
+      status: poolStatusValidator,
+      preferredRecyclerId: v.optional(v.id("recyclers")),
+      matchedRecyclerId: v.optional(v.id("recyclers")),
+      pickupWindow: v.string(),
+      approximateArea: v.string(),
+      transportCostEstimate: v.optional(v.number()), // ₹, user/recycler-editable
+      geohash: v.string(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      expiresAt: v.number(),
+      completedAt: v.optional(v.number()),
+    })
+      .index("by_ref", ["poolRef"])
+      .index("by_creator", ["creatorCollectorId"])
+       .index("by_material", ["materialCode"])
+      .index("by_status", ["status"])
+      .index("by_geohash", ["geohash"])
+      .index("by_recycler", ["preferredRecyclerId"]),
+
+    // §12 per-collector contributions — traceable ownership, one lot per
+    // contribution; the original lot keeps its own lifecycle and earnings.
+    poolContributions: defineTable({
+      poolId: v.id("pools"),
+      collectorId: v.id("profiles"),
+      lotId: v.id("lots"),
+      quantityKg: v.number(),
+      contributionStatus: poolContributionStatusValidator,
+      joinedAt: v.number(),
+    })
+      .index("by_pool", ["poolId"])
+      .index("by_collector", ["collectorId"])
+      .index("by_lot", ["lotId"]),
+    // In-app pooling notifications (§18). First-party only — no SMS/email.
+    poolNotifications: defineTable({
+      collectorId: v.id("profiles"),
+      poolId: v.optional(v.id("pools")),
+      type: v.string(), // pool_invitation | member_joined | target_reached | recycler_matched | pickup_scheduled | pool_completed
+      title: v.string(),
+      body: v.string(),
+      readAt: v.optional(v.number()),
+      createdAt: v.number(),
+    }).index("by_collector", ["collectorId"]),
+
+    // §14 estimated transportation economics (calculations, never guarantees).
+    transportEstimates: defineTable({
+      poolId: v.optional(v.id("pools")),
+      pooledQuantityKg: v.number(),
+      transportCost: v.number(),
+      participants: v.number(),
+      costPerKgPooled: v.number(),
+      individualCostPerKg: v.optional(v.number()),
+      note: v.string(),
+      createdAt: v.number(),
+    }).index("by_pool", ["poolId"]),
 
     // Rules-based anomaly flags attached to lots (§34; "Review recommended",
     // never an accusation, never a trained ML claim).

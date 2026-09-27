@@ -1,5 +1,5 @@
 import {
-  ChevronRightIcon, LotsIcon, MapPinIcon, PriceTagIcon, ShieldCheckIcon, SpeakerIcon,
+  ChevronRightIcon, LayersIcon, LotsIcon, MapPinIcon, PriceTagIcon, ShieldCheckIcon, SpeakerIcon,
   TrendUpIcon, WalletIcon, WarningIcon,
 } from "@/components/icons";
 import { ClayButton, ClayCard, ClaySection } from "@/components/ui/kit";
@@ -8,10 +8,11 @@ import { formatINR } from "@/lib/format";
 import { spokenPriceSentence } from "@/lib/i18n";
 import { useMaterials, useProfile, useEarnings } from "@/hooks/use-kc-data";
 
-export default function CollectorHome({ onNavigate, onOpenSafety, onOpenRecyclers }: {
+export default function CollectorHome({ onNavigate, onOpenSafety, onOpenRecyclers, onOpenPooling }: {
   onNavigate: (tab: "prices" | "lots" | "earnings" | "add") => void;
   onOpenSafety: () => void;
   onOpenRecyclers: (materialCode?: string) => void;
+  onOpenPooling: () => void;
 }) {
   const { t, lang } = useAppState();
   const profile = useProfile();
@@ -84,6 +85,27 @@ export default function CollectorHome({ onNavigate, onOpenSafety, onOpenRecycler
           ))}
         </div>
       </ClaySection>
+
+      {/* Smart Scrap Pooling card (Part 2 §16) */}
+      <ClayCard className="rounded-3xl">
+        <div className="flex items-start gap-3">
+          <span className="clay-sm flex size-10 shrink-0 items-center justify-center text-teal">
+            <LayersIcon className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[15px] font-extrabold text-navy">Smart Scrap Pooling</p>
+            <p className="mt-1 text-[13px] leading-snug text-muted2">
+              Have a small quantity? Pool with nearby collectors so shared transport becomes viable.
+            </p>
+            <button
+              onClick={onOpenPooling}
+              className="mt-2 inline-flex items-center gap-1 text-[13px] font-bold text-teal-deep"
+            >
+              Find nearby collectors <ChevronRightIcon className="size-4" />
+            </button>
+          </div>
+        </div>
+      </ClayCard>
 
       {/* Today's rate + voice */}
       {pcb && (

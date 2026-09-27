@@ -246,10 +246,26 @@ export const createLot = mutation({
     const referenceId = await nextReferenceId(ctx);
     // §9 provenance: the exact source of the frozen price, from the market
     // provider when the snapshot was market-linked (never claimed live beyond
-    // its real source kind), else the pre-market board default.
+    // its real source kind), else the pre-market board default. Discovery
+    // fields (Part 1 §6) ride along when today's snapshot exists.
+    const discovery = await ctx.db
+      .query("priceSnapshots")
+      .withIndex("by_material_day", (q) =>
+        q.eq("materialCode", args.materialCode).eq("day", utcDayKey()),
+      )
+      .unique();
     const priceSource =
       snap?.source ?? `Board default — ${m.name} (demo)`;
-    const priceSourceKind = snap?.sourceKind ?? ("board-default" as const);
+    const priceSourceName = discovery?.sourceName ?? priceSource;
+    const priceSourceKind = discovery
+      ? discovery.sourceKind === "recycler_quote"
+        ? ("recycler_quote" as const)
+        : ("demo" as const)
+      : snap?.sourceKind ?? ("board-default" as const);
+    const pricingMethod = discovery
+      ? discovery.pricingMethod
+      : ("board_default" as const);
+    const recyclerQuoteCount = discovery?.recyclerQuoteCount;
     // Normalize AI confidence to the UI contract (0-100 integer) regardless of
     // what the client sent (§45: never trust client-provided AI values).
     const aiConfidenceNormalized =
@@ -279,7 +295,10 @@ export const createLot = mutation({
       priceRecordId: snap?._id,
       priceTimestamp: snap?.recordedAt,
       priceSource,
+      priceSourceName,
       priceSourceKind,
+      pricingMethod,
+      recyclerQuoteCount,
       marketPriceId: snap?.marketPriceId,
       locationLabel: args.locationLabel,
       lat: args.lat,

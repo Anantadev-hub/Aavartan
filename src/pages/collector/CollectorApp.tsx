@@ -15,10 +15,12 @@ import CollectorEarnings from "./CollectorEarnings";
 import SafetyGuide from "./SafetyGuide";
 import FindRecycler from "./FindRecycler";
 import LotDetail from "./LotDetail";
+import Pooling from "./Pooling";
 
 type Overlay =
   | null
   | { kind: "safety" }
+  | { kind: "pooling" }
   | { kind: "recyclers"; materialCode?: string; weightKg?: number };
 
 function Redirect({ to }: { to: string }) {
@@ -95,6 +97,15 @@ export default function CollectorApp() {
     );
   }
 
+  if (overlay?.kind === "pooling") {
+    return (
+      <PhoneFrame>
+        <Pooling onClose={() => setOverlay(null)} />
+        <Toasts />
+      </PhoneFrame>
+    );
+  }
+
   if (overlay?.kind === "safety") {
     return (
       <PhoneFrame>
@@ -131,6 +142,7 @@ export default function CollectorApp() {
             onNavigate={(next) => setTab(next)}
             onOpenSafety={() => setOverlay({ kind: "safety" })}
             onOpenRecyclers={(materialCode) => setOverlay({ kind: "recyclers", materialCode })}
+            onOpenPooling={() => setOverlay({ kind: "pooling" })}
           />
         )}
         {tab === "prices" && <CollectorPrices />}

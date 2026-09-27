@@ -10,6 +10,8 @@ import {
   useMarketPriceHistory,
   useFairPriceRange,
   useRefreshPrices,
+  useDiscoveryBoard,
+  useRecyclerQuotes,
 } from "@/hooks/use-kc-data";
 import { cn } from "@/lib/utils";
 
@@ -39,9 +41,12 @@ export default function CollectorPrices() {
 
   const history = useMarketPriceHistory(selected, days);
   const fairRange = useFairPriceRange(selected);
+  const discovery = useDiscoveryBoard();
+  const quotes = useRecyclerQuotes(selected);
 
   const rows = payload?.prices ?? [];
   const current = rows.find((r) => r.materialCode === selected) ?? rows[0];
+  const discoveryRow = discovery?.find((d) => d.materialCode === selected) ?? null;
 
   const speakPrice = (name: string, price: number, unit: string) =>
     speak(spokenPriceSentence(name, price, unit, lang), lang);
@@ -83,8 +88,26 @@ export default function CollectorPrices() {
         </button>
       </div>
 
-      {/* Honest terminology (§8) — derived from the provider's real cadence */}
-      {(current ?? payload?.provider) && (
+      {/* Honest terminology (§8) — derived from the provider's real cadence.
+          Discovery state (Part 1 §4) takes precedence when real recycler
+          quotes exist; the two states are always visually distinct. */}
+      {discoveryRow?.pricingMethod === "recycler_quote_median" ? (
+        <div className="clay-sm rounded-2xl border-l-4 border-[var(--verified)] px-4 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-teal-deep">
+            Recycler quote reference
+          </p>
+          <p className="mt-1 text-[15px] font-extrabold text-navy">
+            {formatINR(discoveryRow.quoteRange?.low ?? discoveryRow.pricePerKg)}–
+            {formatINR(discoveryRow.quoteRange?.high ?? discoveryRow.pricePerKg)}/kg
+          </p>
+          <p className="mt-0.5 text-[12px] leading-snug text-muted2">
+            Reference: {formatINR(discoveryRow.pricePerKg)}/kg · based on{" "}
+            {discoveryRow.recyclerQuoteCount} recycler quote
+            {discoveryRow.recyclerQuoteCount > 1 ? "s" : ""} · {discoveryRow.location} ·{" "}
+            updated {formatDay(discoveryRow.day)}
+          </p>
+        </div>
+      ) : (
         <div className="clay-sm rounded-2xl px-4 py-3">
           <p className="text-[11px] font-bold uppercase tracking-wider text-teal-deep">
             {current?.terminology.headline ?? "Reference price"}
@@ -183,6 +206,38 @@ export default function CollectorPrices() {
                 </span>
               )}
             </div>
+            {discoveryRow && (
+              <div
+                className={cn(
+                  "mb-3 rounded-2xl px-3.5 py-2.5",
+                  discoveryRow.pricingMethod === "recycler_quote_median"
+                    ? "bg-[color-mix(in_srgb,var(--verified)_12%,transparent)]"
+                    : "bg-muted",
+                )}
+              >
+                <p className="text-[12.5px] font-bold text-navy">{discoveryRow.label}</p>
+                <p className="text-[11.5px] text-muted2">
+                  {discoveryRow.pricingMethod === "recycler_quote_median"
+                    ? `Median of ${discoveryRow.recyclerQuoteCount} live recycler buying quotes`
+                    : "No recycler quotes yet — showing the labelled demo reference feed"}
+                </p>
+              </div>
+            )}
+            {quotes && quotes.length > 0 && (
+              <div className="mb-3">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-muted2">
+                  Current recycler quotes ({quotes.length})
+                </p>
+                <div className="mt-1.5 space-y-1.5">
+                  {quotes.slice(0, 3).map((q) => (
+                    <div key={q.quoteId} className="flex items-center justify-between gap-2 text-[12.5px]">
+                      <span className="min-w-0 flex-1 truncate text-muted2">{q.recyclerName}</span>
+                      <span className="font-bold text-navy">{formatINR(q.pricePerKg)}/kg</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <dl className="mt-3 space-y-1.5 text-[13px]">
               <div className="flex justify-between gap-3">
                 <dt className="text-muted2">Material</dt>

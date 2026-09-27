@@ -6,7 +6,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
   BuildingIcon, GridIcon, LayersIcon, LogOutIcon, MapPinIcon, PhoneIcon, RecycleIcon,
-  ShieldCheckIcon, StarIcon, TruckIcon, ClockIcon, WalletIcon,
+  ShieldCheckIcon, StarIcon, TruckIcon, ClockIcon, WalletIcon, PriceTagIcon,
 } from "@/components/icons";
 import { ClayButton, ClayCard, ClayBadge, LoadingState, OfflineBanner, Toasts, SyncIndicator } from "@/components/ui/kit";
 import { useAppState, setOnline } from "@/lib/app-state";
@@ -20,8 +20,9 @@ import { formatINR, timeAgo, formatKg } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import RecyclerLots from "./RecyclerLots";
 import RecyclerTransactions from "./RecyclerTransactions";
+import RecyclerQuotes from "./RecyclerQuotes";
 
-type Tab = "home" | "lots" | "deals" | "facility";
+type Tab = "home" | "lots" | "deals" | "quotes" | "facility";
 
 function Redirect({ to }: { to: string }) {
   const navigate = useNavigate();
@@ -125,6 +126,7 @@ export default function RecyclerApp() {
         {tab === "home" && <RecyclerDashboard recyclerId={recyclerId} onGoTab={setTab} />}
         {tab === "lots" && <RecyclerLots recyclerId={recyclerId} />}
         {tab === "deals" && <RecyclerTransactions recyclerId={recyclerId} />}
+        {tab === "quotes" && <RecyclerQuotes recyclerId={recyclerId} />}
         {tab === "facility" && <RecyclerFacility recyclerId={recyclerId} />}
       </main>
 
@@ -133,12 +135,13 @@ export default function RecyclerApp() {
         aria-label="Recycler primary"
         className="sticky bottom-0 z-40 border-t border-white/[0.08] bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
       >
-        <div className="mx-auto grid max-w-6xl grid-cols-4 px-2 py-1.5">
+        <div className="mx-auto grid max-w-6xl grid-cols-5 px-2 py-1.5">
           {(
             [
               { tab: "home", label: t("nav.home"), icon: GridIcon },
               { tab: "lots", label: t("nav.lots"), icon: LayersIcon },
               { tab: "deals", label: t("nav.deals"), icon: RecycleIcon },
+              { tab: "quotes", label: "Quotes", icon: PriceTagIcon },
               { tab: "facility", label: t("nav.facility"), icon: BuildingIcon },
             ] as const
           ).map((item) => (
