@@ -110,6 +110,11 @@ const en: Dict = {
   "pool.contributions": "My Contributions",
   "pool.completed": "Completed Pools",
   "pool.subtitle": "Have a small quantity? Pool with nearby collectors.",
+  "pool.findingNearby": "Finding nearby collectors…",
+  "pool.nearbyEmpty": "No nearby collectors have opted into scrap pooling yet.",
+  "pool.loadError": "Unable to load nearby collectors right now.",
+  "pool.boundary": "Something went wrong loading Scrap Pooling.",
+  "pool.useMyArea": "Use my area instead",
 };
 
 const hi: Dict = {
@@ -208,6 +213,11 @@ const hi: Dict = {
   "pool.contributions": "मेरे योगदान",
   "pool.completed": "पूर्ण हुए पूल",
   "pool.subtitle": "कम मात्रा है? आस-पास के कलेक्टरों के साथ पूल करें।",
+  "pool.findingNearby": "आस-पास के कलेक्टर खोजे जा रहे हैं…",
+  "pool.nearbyEmpty": "अभी कोई आस-पास का कलेक्टर स्क्रैप पूलिंग के लिए शामिल नहीं हुआ है।",
+  "pool.loadError": "अभी आस-पास के कलेक्टर लोड नहीं हो सके।",
+  "pool.boundary": "स्क्रैप पूलिंग लोड करने में कुछ गड़बड़ हो गई।",
+  "pool.useMyArea": "मेरे क्षेत्र का उपयोग करें",
 };
 
 const mr: Dict = {
@@ -306,6 +316,11 @@ const mr: Dict = {
   "pool.contributions": "माझे योगदान",
   "pool.completed": "पूर्ण झालेले पूल",
   "pool.subtitle": "कमी प्रमाण आहे? जवळपासच्या कलेक्टरांसोबत पूल करा.",
+  "pool.findingNearby": "जवळपासचे कलेक्टर शोधत आहोत…",
+  "pool.nearbyEmpty": "अजून कोणीही जवळपासचा कलेक्टर स्क्रॅप पूलिंगसाठी सहभागी झालेला नाही.",
+  "pool.loadError": "सध्या जवळपासचे कलेक्टर लोड करता आले नाहीत.",
+  "pool.boundary": "स्क्रॅप पूलिंग लोड करताना काहीतरी चूक झाली.",
+  "pool.useMyArea": "माझा परिसर वापरा",
 };
 
 const DICTS: Record<Lang, Dict> = { en, hi, mr };

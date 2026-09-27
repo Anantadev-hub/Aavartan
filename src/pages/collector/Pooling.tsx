@@ -1,18 +1,18 @@
-import { useMemo, useState } from "react";
+import { Component, useEffect, useState, type ReactNode } from "react";
 import {
-  ChevronRightIcon, LayersIcon, MapPinIcon, RecycleIcon, TruckIcon,
+  ChevronRightIcon, LayersIcon, MapPinIcon, RecycleIcon,
 } from "@/components/icons";
 import { AppHeader } from "@/components/shell";
 import {
-  ClayBadge, ClayButton, ClayCard, ClayInput, ClaySection, EmptyState, LoadingState,
+  ClayButton, ClayCard, ClayInput, ClaySection, EmptyState, LoadingState,
 } from "@/components/ui/kit";
 import { useAppState } from "@/lib/app-state";
-import { formatKg, formatINR, timeAgo } from "@/lib/format";
+import { translate, loadLang } from "@/lib/i18n";
+import { formatKg, timeAgo } from "@/lib/format";
 import {
-  useMyPools, useNearbyPools, useNearbyCollectors, useMyContributions,
-  useUpdateMyLocation, useCreatePool, useJoinPool, useLeavePool,
-  useSaveTransportEstimate, useMatchPoolToRecycler, useSchedulePickup,
-  useCompletePool, useMyLots, useProfile, hasBackendId,
+  useMyPools, useNearbyPools, useMyContributions,
+  useCreatePool, useUpdateMyLocation,
+  useMyLots, useProfile, hasBackendId, useAuthReady,
   usePoolNotifications, useMarkNotificationsRead,
 } from "@/hooks/use-kc-data";
 import { cn } from "@/lib/utils";
@@ -23,9 +23,21 @@ import PoolDetail from "./PoolDetail";
 // the app shows approximate distances and area labels only — the UI never
 // renders another collector's coordinates, and no GPS is collected unless the
 // collector taps "Find Nearby Collectors" (manual area fallback always works).
+//
+// Resilience rules (this page must never render blank):
+//   - GPS is requested ONLY on the "Find Nearby Collectors" tap; permission
+//     denial or unavailability just opens the manual area panel.
+//   - Auth-dependent queries are skipped until the auth session hydrates —
+//     an unauthenticated Convex query THROWS during render ("Sign in
+//     required"), which previously black-screened this page.
+//   - If the backend cannot resolve the queries within POOL_LOAD_TIMEOUT_MS
+//     the page shows a retryable error card, never a stuck spinner.
+//   - PoolErrorBoundary catches any child render error with Retry.
 // ---------------------------------------------------------------------------
 
 type View = "main" | "create" | "detail";
+
+const POOL_LOAD_TIMEOUT_MS = 12_000;
 
 const POOL_STATUS_LABEL: Record<string, string> = {
   OPEN: "Open",
@@ -38,12 +50,63 @@ const POOL_STATUS_LABEL: Record<string, string> = {
   EXPIRED: "Expired",
 };
 
+/** Error card with Retry — used when queries can't resolve (offline/backend). */
+function LoadErrorCard({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useAppState();
+  return (
+    <ClayCard className="rounded-3xl">
+      <p className="text-[13px] text-muted2">{message}</p>
+      <ClayButton variant="surface" size="sm" className="mt-3" onClick={onRetry}>
+        {t("common.retry")}
+      </ClayButton>
+    </ClayCard>
+  );
+}
+
+/**
+ * Boundary around the whole pooling flow: a child crash shows this + Retry
+ * (remounts the subtree) instead of the dark root error screen.
+ */
+class PoolErrorBoundary extends Component<
+  { children: ReactNode; onRetry: () => void },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err: unknown) {
+    console.error("[Pooling] render error:", err);
+  }
+  render() {
+    if (this.state.hasError) {
+      const t = translate(loadLang(), "pool.boundary");
+      const retryLabel = translate(loadLang(), "common.retry");
+      return (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <EmptyState
+            title={t}
+            sub="Check your connection and try again."
+            action={
+              <ClayButton variant="surface" size="sm" onClick={this.props.onRetry}>
+                {retryLabel}
+              </ClayButton>
+            }
+          />
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function Pooling({ onClose }: { onClose: () => void }) {
-  const { t, online } = useAppState();
   const profile = useProfile();
   const ready = hasBackendId(profile);
   const [view, setView] = useState<View>("main");
   const [detailPoolId, setDetailPoolId] = useState<string | null>(null);
+  const [epoch, setEpoch] = useState(0);
+  const retry = () => setEpoch((e) => e + 1);
 
   if (!ready) {
     return (
@@ -58,58 +121,75 @@ export default function Pooling({ onClose }: { onClose: () => void }) {
       </div>
     );
   }
-  if (view === "detail" && detailPoolId) {
-    return (
-      <PoolDetail
-        poolId={detailPoolId}
-        onBack={() => {
-          setDetailPoolId(null);
-          setView("main");
-        }}
-      />
-    );
-  }
-  if (view === "create") {
-    return (
-      <CreatePoolForm
-        onClose={() => setView("main")}
-        onCreated={(poolId) => {
-          setDetailPoolId(poolId);
-          setView("detail");
-        }}
-      />
-    );
-  }
   return (
-    <PoolingMain
-      onClose={onClose}
-      onOpenCreate={() => setView("create")}
-      onOpenPool={(id) => {
-        setDetailPoolId(id);
-        setView("detail");
-      }}
-    />
+    <PoolErrorBoundary key={`pool-boundary-${epoch}`} onRetry={retry}>
+      {view === "detail" && detailPoolId ? (
+        <PoolDetail
+          poolId={detailPoolId}
+          onBack={() => {
+            setDetailPoolId(null);
+            setView("main");
+          }}
+          onRetry={retry}
+        />
+      ) : view === "create" ? (
+        <CreatePoolForm
+          onClose={() => setView("main")}
+          onCreated={(poolId) => {
+            setDetailPoolId(poolId);
+            setView("detail");
+          }}
+        />
+      ) : (
+        <PoolingMain
+          onClose={onClose}
+          onOpenCreate={() => setView("create")}
+          onOpenPool={(id) => {
+            setDetailPoolId(id);
+            setView("detail");
+          }}
+          onRetry={retry}
+        />
+      )}
+    </PoolErrorBoundary>
   );
 }
 
 function PoolingMain({
-  onClose, onOpenCreate, onOpenPool,
+  onClose, onOpenCreate, onOpenPool, onRetry,
 }: {
   onClose: () => void;
   onOpenCreate: () => void;
   onOpenPool: (id: string) => void;
+  onRetry: () => void;
 }) {
   const { t, online, toast } = useAppState();
-  const profile = useProfile();
-  const myPools = useMyPools();
-  const nearby = useNearbyPools();
-  const contributions = useMyContributions();
-  const updateLocation = useUpdateMyLocation();
-  const notifications = usePoolNotifications();
+  const authReady = useAuthReady();
+  const myPools = useMyPools({ enabled: authReady });
+  const nearby = useNearbyPools(undefined, { enabled: authReady });
+  const contributions = useMyContributions({ enabled: authReady });
+  const notifications = usePoolNotifications({ enabled: authReady });
   const markRead = useMarkNotificationsRead();
+  const updateLocation = useUpdateMyLocation();
   const [locating, setLocating] = useState(false);
   const [manualArea, setManualArea] = useState("");
   const [showManual, setShowManual] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
+
+  // Backend-unreachable guard: queries still undefined (no live data, no
+  // offline cache) after the timeout means they cannot resolve — show the
+  // retryable error state (TEST 5), never a spinner forever and never a blank
+  // screen. Not gated on authReady: a down backend also blocks auth hydration.
+  const stillLoading =
+    myPools === undefined || nearby === undefined || contributions === undefined;
+  useEffect(() => {
+    if (!stillLoading) {
+      setTimedOut(false);
+      return;
+    }
+    const id = setTimeout(() => setTimedOut(true), POOL_LOAD_TIMEOUT_MS);
+    return () => clearTimeout(id);
+  }, [stillLoading]);
 
   const activePools = (myPools ?? []).filter((p) =>
     !["COMPLETED", "CANCELLED", "EXPIRED"].includes(p.status),
@@ -121,9 +201,10 @@ function PoolingMain({
     (c) => c.contributionStatus !== "WITHDRAWN" && ["COMPLETED", "MATCHED_TO_RECYCLER", "PICKUP_SCHEDULED"].includes(c.poolStatus),
   );
 
-  // §7: one-time, explicit permission request. No background tracking.
+  // §7: one-time, explicit permission request on the button tap. No background
+  // tracking, no request on page open. Every failure path keeps the UI usable.
   const requestGps = () => {
-    if (!("geolocation" in navigator)) {
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
       setShowManual(true);
       return;
     }
@@ -131,23 +212,32 @@ function PoolingMain({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLocating(false);
-        void updateLocation({
+        void saveLocation({
           latitude: Math.round(pos.coords.latitude * 1000) / 1000, // ~100 m
           longitude: Math.round(pos.coords.longitude * 1000) / 1000,
           locality: manualArea.trim() || "My area",
           poolingOptIn: true,
-        })
-          .then(() => toast("Location saved — nearby pools updated", "success"))
-          .catch(() => toast("Could not save location — try the area option", "error"));
+        });
       },
       () => {
-        // Permission denied → manual area fallback (§7).
+        // Permission denied / unavailable / timeout → manual area fallback (§7).
         setLocating(false);
         setShowManual(true);
       },
       { timeout: 8000, maximumAge: 600_000 },
     );
   };
+
+  // Location save is best-effort: failure toasts, page keeps rendering.
+  const saveLocation = (args: {
+    latitude: number;
+    longitude: number;
+    locality: string;
+    poolingOptIn: boolean;
+  }) =>
+    updateLocation(args)
+      .then(() => toast("Location saved — nearby pools updated", "success"))
+      .catch(() => toast("Could not save location — try the area option", "error"));
 
   const saveManualArea = () => {
     const area = manualArea.trim();
@@ -156,9 +246,7 @@ function PoolingMain({
     const seed = [...area].reduce((s, c) => (s * 31 + c.charCodeAt(0)) >>> 0, 7);
     const lat = 28.55 + (seed % 100) / 1000;
     const lng = 77.2 + ((seed >> 7) % 100) / 1000;
-    void updateLocation({ latitude: lat, longitude: lng, locality: area, poolingOptIn: true })
-      .then(() => toast("Area saved — nearby pools updated", "success"))
-      .catch(() => toast("Could not save area — try again", "error"));
+    void saveLocation({ latitude: lat, longitude: lng, locality: area, poolingOptIn: true });
     setShowManual(false);
   };
 
@@ -189,29 +277,29 @@ function PoolingMain({
           <div className="mt-3 grid grid-cols-2 gap-2.5">
             <ClayButton onClick={requestGps} disabled={locating} className="w-full">
               <MapPinIcon className="size-5" />
-              {locating ? "Locating…" : "Find Nearby"}
+              {locating ? "Locating…" : t("pool.findNearby")}
             </ClayButton>
             <ClayButton variant="surface" onClick={onOpenCreate} className="w-full">
               <LayersIcon className="size-5" />
-              Create Pool
+              {t("pool.create")}
             </ClayButton>
           </div>
           <button
             onClick={() => setShowManual((v) => !v)}
             className="mt-2 text-[12.5px] font-bold text-teal-deep"
           >
-            {showManual ? "Hide area selection" : "Or select your area manually (no GPS)"}
+            {showManual ? "Hide area selection" : t("pool.useMyArea")}
           </button>
           {showManual && (
             <div className="mt-2 flex gap-2">
               <ClayInput
                 value={manualArea}
                 onChange={(e) => setManualArea(e.target.value)}
-                placeholder="e.g. Lajpat Nagar"
-                aria-label="Your area"
+                placeholder="e.g. Lajpat Nagar or 110024"
+                aria-label="Your area or pincode"
               />
               <ClayButton onClick={saveManualArea} disabled={!manualArea.trim()}>
-                Save
+                {t("common.save")}
               </ClayButton>
             </div>
           )}
@@ -246,14 +334,16 @@ function PoolingMain({
         )}
 
         {/* Nearby pool opportunities */}
-        <ClaySection title="Nearby pool opportunities">
+        <ClaySection title={t("pool.nearby")}>
           {nearby === undefined ? (
-            <LoadingState label={t("common.loading")} />
+            timedOut ? (
+              <LoadErrorCard message={t("pool.loadError")} onRetry={onRetry} />
+            ) : (
+              <LoadingState label={t("pool.findingNearby")} />
+            )
           ) : nearby.length === 0 ? (
             <ClayCard className="rounded-3xl">
-              <p className="text-[13px] text-muted2">
-                No open pools nearby yet — create one and neighbours can join.
-              </p>
+              <p className="text-[13px] text-muted2">{t("pool.nearbyEmpty")}</p>
             </ClayCard>
           ) : (
             <div className="space-y-2.5">
@@ -283,9 +373,13 @@ function PoolingMain({
         </ClaySection>
 
         {/* My active pools */}
-        <ClaySection title="My active pools">
+        <ClaySection title={t("pool.myPools")}>
           {myPools === undefined ? (
-            <LoadingState label={t("common.loading")} />
+            timedOut ? (
+              <LoadErrorCard message={t("pool.loadError")} onRetry={onRetry} />
+            ) : (
+              <LoadingState label={t("common.loading")} />
+            )
           ) : activePools.length === 0 ? (
             <ClayCard className="rounded-3xl">
               <p className="text-[13px] text-muted2">You have no active pools.</p>
@@ -300,8 +394,14 @@ function PoolingMain({
         </ClaySection>
 
         {/* My contributions */}
-        <ClaySection title="My contributions">
-          {(contributions ?? []).filter((c) => c.contributionStatus !== "WITHDRAWN").length === 0 ? (
+        <ClaySection title={t("pool.contributions")}>
+          {contributions === undefined ? (
+            timedOut ? (
+              <LoadErrorCard message={t("pool.loadError")} onRetry={onRetry} />
+            ) : (
+              <LoadingState label={t("common.loading")} />
+            )
+          ) : (contributions ?? []).filter((c) => c.contributionStatus !== "WITHDRAWN").length === 0 ? (
             <ClayCard className="rounded-3xl">
               <p className="text-[13px] text-muted2">No contributions yet.</p>
             </ClayCard>
@@ -326,7 +426,7 @@ function PoolingMain({
 
         {/* Completed */}
         {completedPools.length + completedContribs.length > 0 && (
-          <ClaySection title="Completed pools">
+          <ClaySection title={t("pool.completed")}>
             <div className="space-y-2">
               {completedPools.map((p) => (
                 <PoolRowCard key={p._id} pool={p} onOpen={() => onOpenPool(p._id)} />
@@ -379,11 +479,11 @@ function PoolRowCard({ pool, onOpen }: { pool: NonNullable<ReturnType<typeof use
 function CreatePoolForm({ onClose, onCreated }: { onClose: () => void; onCreated: (poolId: string) => void }) {
   const { t, toast, online } = useAppState();
   const profile = useProfile();
-  const lots = useMyLots(profile?._id);
+  const lots = useMyLots(profile?._id as never);
   const createPool = useCreatePool();
   const [lotId, setLotId] = useState<string>("");
   const [target, setTarget] = useState("50");
-  const [window, setWindow] = useState("Flexible");
+  const [pickupWindowText, setPickupWindowText] = useState("Flexible");
   const [transport, setTransport] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -397,7 +497,7 @@ function CreatePoolForm({ onClose, onCreated }: { onClose: () => void; onCreated
     createPool({
       lotId: lotId as never,
       targetQuantityKg: Number(target) || 0,
-      pickupWindow: window,
+      pickupWindow: pickupWindowText,
       transportCostEstimate: transport ? Number(transport) : undefined,
     })
       .then((res) => onCreated(res.poolId))
@@ -451,8 +551,8 @@ function CreatePoolForm({ onClose, onCreated }: { onClose: () => void; onCreated
             </ClaySection>
             <ClaySection title="Pickup / transport window">
               <ClayInput
-                value={window}
-                onChange={(e) => setWindow(e.target.value)}
+                value={pickupWindowText}
+                onChange={(e) => setPickupWindowText(e.target.value)}
                 placeholder="e.g. Weekday mornings"
               />
             </ClaySection>

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useAction } from "convex/react";
+import { useQuery, useMutation, useAction, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { useCallback, useEffect, useMemo } from "react";
@@ -54,6 +54,19 @@ type RecyclerStats = {
   completed: number;
   todayValue: number;
 };
+
+/**
+ * True once the Convex Auth session is hydrated. Auth-dependent backend
+ * queries MUST be gated on this flag: the server throws "Sign in required"
+ * for an unauthenticated session and the Convex React client re-throws that
+ * error during render, which previously crashed the Pooling screen (black
+ * screen via the root error boundary). Profile reads stay ungated —
+ * myProfile returns null (not a throw) for an unauthenticated session.
+ */
+export function useAuthReady(): boolean {
+  const { isAuthenticated } = useConvexAuth();
+  return isAuthenticated;
+}
 
 /** Signed-in user's profile (collector or recycler role). */
 export function useProfile(): AppProfile | Doc<"profiles"> | null | undefined {
@@ -519,8 +532,11 @@ export type MyPoolRow = {
   expiresAt: number;
 };
 
-export function useMyPools() {
-  const live = useQuery(api.pooling.myPools, {});
+export function useMyPools(opts: { enabled?: boolean } = {}) {
+  const live = useQuery(
+    api.pooling.myPools,
+    opts.enabled === false ? "skip" : {},
+  );
   useEffect(() => {
     if (live) writeCache("pools.mine", live);
   }, [live]);
@@ -542,8 +558,14 @@ export type NearbyPoolRow = {
   expiresAt: number;
 };
 
-export function useNearbyPools(materialCode?: string) {
-  const live = useQuery(api.pooling.nearbyPools, { materialCode });
+export function useNearbyPools(
+  materialCode?: string,
+  opts: { enabled?: boolean } = {},
+) {
+  const live = useQuery(
+    api.pooling.nearbyPools,
+    opts.enabled === false ? "skip" : { materialCode },
+  );
   const key = `pools.nearby.${materialCode ?? "all"}`;
   useEffect(() => {
     if (live) writeCache(key, live);
@@ -579,8 +601,11 @@ export function useNearbyCollectors(materialCode: string | undefined) {
   return live !== undefined ? live : cachedOrUndefined<NearbyCollectorRow[]>(key);
 }
 
-export function useMyContributions() {
-  const live = useQuery(api.pooling.myContributions, {});
+export function useMyContributions(opts: { enabled?: boolean } = {}) {
+  const live = useQuery(
+    api.pooling.myContributions,
+    opts.enabled === false ? "skip" : {},
+  );
   useEffect(() => {
     if (live) writeCache("pools.contributions", live);
   }, [live]);
@@ -599,10 +624,13 @@ export function useMyContributions() {
       }>>("pools.contributions");
 }
 
-export function usePoolDetail(poolId: string | undefined) {
+export function usePoolDetail(
+  poolId: string | undefined,
+  opts: { enabled?: boolean } = {},
+) {
   const live = useQuery(
     api.pooling.getPool,
-    poolId ? { poolId: poolId as never } : "skip",
+    poolId && opts.enabled !== false ? { poolId: poolId as never } : "skip",
   );
   const key = `pool.${poolId ?? "x"}`;
   useEffect(() => {
@@ -611,10 +639,13 @@ export function usePoolDetail(poolId: string | undefined) {
   return live !== undefined ? live : cachedOrUndefined<MyPoolRow>(key);
 }
 
-export function usePoolRecyclerOptions(poolId: string | undefined) {
+export function usePoolRecyclerOptions(
+  poolId: string | undefined,
+  opts: { enabled?: boolean } = {},
+) {
   const live = useQuery(
     api.pooling.matchRecyclersForPool,
-    poolId ? { poolId: poolId as never } : "skip",
+    poolId && opts.enabled !== false ? { poolId: poolId as never } : "skip",
   );
   const key = `poolOptions.${poolId ?? "x"}`;
   useEffect(() => {
@@ -650,8 +681,11 @@ export type PoolNotification = {
   createdAt: number;
 };
 
-export function usePoolNotifications() {
-  const live = useQuery(api.pooling.myNotifications, {});
+export function usePoolNotifications(opts: { enabled?: boolean } = {}) {
+  const live = useQuery(
+    api.pooling.myNotifications,
+    opts.enabled === false ? "skip" : {},
+  );
   useEffect(() => {
     if (live) writeCache("pools.notifications", live);
   }, [live]);

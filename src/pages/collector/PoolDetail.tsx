@@ -1,15 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { RecycleIcon, TruckIcon, LotsIcon } from "@/components/icons";
 import { AppHeader } from "@/components/shell";
 import {
-  ClayBadge, ClayButton, ClayCard, ClayInput, ClaySection, LoadingState,
+  ClayBadge, ClayButton, ClayCard, ClayInput, ClaySection, EmptyState, LoadingState,
 } from "@/components/ui/kit";
 import { useAppState } from "@/lib/app-state";
 import { formatKg, formatINR } from "@/lib/format";
 import {
   usePoolDetail, usePoolRecyclerOptions, useJoinPool, useLeavePool,
   useSaveTransportEstimate, useMatchPoolToRecycler, useSchedulePickup,
-  useCompletePool, useMyLots, useProfile,
+  useCompletePool, useMyLots, useProfile, useAuthReady,
 } from "@/hooks/use-kc-data";
 
 
@@ -24,9 +24,18 @@ const STATUS_LABEL: Record<string, string> = {
   EXPIRED: "Expired",
 };
 
-export default function PoolDetail({ poolId, onBack }: { poolId: string; onBack: () => void }) {
+export default function PoolDetail({
+  poolId, onBack, onRetry,
+}: {
+  poolId: string;
+  onBack: () => void;
+  onRetry?: () => void;
+}) {
   const { t, toast } = useAppState();
-  const pool = usePoolDetail(poolId);
+  const authReady = useAuthReady();
+  // Auth-gated: an unauthenticated Convex query THROWS during render
+  // ("Sign in required") — skip until the session hydrates.
+  const pool = usePoolDetail(poolId, { enabled: authReady });
   const joinPool = useJoinPool();
   const leavePool = useLeavePool();
   const saveTransport = useSaveTransportEstimate();
@@ -37,6 +46,18 @@ export default function PoolDetail({ poolId, onBack }: { poolId: string; onBack:
   const [showJoin, setShowJoin] = useState(false);
   const [transport, setTransport] = useState("");
   const [busy, setBusy] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
+
+  // Backend-unreachable guard (same contract as PoolingMain): a stuck
+  // "loading" resolves to a retryable error card, never an infinite spinner.
+  useEffect(() => {
+    if (pool !== undefined) {
+      setTimedOut(false);
+      return;
+    }
+    const id = setTimeout(() => setTimedOut(true), 12_000);
+    return () => clearTimeout(id);
+  }, [pool]);
 
   const run = (fn: () => Promise<unknown>, okMsg: string) => {
     setBusy(true);
@@ -50,7 +71,21 @@ export default function PoolDetail({ poolId, onBack }: { poolId: string; onBack:
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <AppHeader title="Smart Pool" onBack={onBack} />
-        <LoadingState label={t("common.loading")} />
+        <div className="flex-1 overflow-y-auto px-4 pt-4">
+          {timedOut ? (
+            <EmptyState
+              title="Unable to load this pool right now."
+              sub="Check your connection and try again."
+              action={
+                <ClayButton variant="surface" size="sm" onClick={() => onRetry?.()}>
+                  {t("common.retry")}
+                </ClayButton>
+              }
+            />
+          ) : (
+            <LoadingState label={t("common.loading")} />
+          )}
+        </div>
       </div>
     );
   }
@@ -58,7 +93,19 @@ export default function PoolDetail({ poolId, onBack }: { poolId: string; onBack:
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <AppHeader title="Smart Pool" onBack={onBack} />
-        <p className="px-4 pt-4 text-sm text-muted2">Pool not found.</p>
+        <div className="flex-1 overflow-y-auto px-4 pt-4">
+          <EmptyState
+            title="Pool not found"
+            sub="It may have been cancelled or expired."
+            action={
+              onRetry ? (
+                <ClayButton variant="surface" size="sm" onClick={() => onRetry?.()}>
+                  {t("common.retry")}
+                </ClayButton>
+              ) : undefined
+            }
+          />
+        </div>
       </div>
     );
   }
@@ -157,6 +204,7 @@ export default function PoolDetail({ poolId, onBack }: { poolId: string; onBack:
             {pool.isCreator && joinable && (
               <RecyclerOptionsCard
                 poolId={pool._id}
+                enabled={authReady}
                 onMatch={(recyclerId) =>
                   run(() => matchToRecycler({ poolId: pool._id as never, recyclerId: recyclerId as never }), "Recycler matched")
                 }
@@ -206,8 +254,9 @@ export default function PoolDetail({ poolId, onBack }: { poolId: string; onBack:
 /** Pick one of YOUR compatible lots to contribute (G7/G8 enforced server-side). */
 function JoinPicker({ poolId, materialCode, onDone }: { poolId: string; materialCode: string; onDone: () => void }) {
   const { toast } = useAppState();
+  const authReady = useAuthReady();
   const profile = useProfile();
-  const lots = useMyLots(profile?._id);
+  const lots = useMyLots(authReady ? (profile?._id as never) : undefined);
   const joinPool = useJoinPool();
   const [busy, setBusy] = useState(false);
   const eligible = (lots ?? []).filter(
@@ -251,8 +300,14 @@ function JoinPicker({ poolId, materialCode, onDone }: { poolId: string; material
 }
 
 /** §15 compatible recycler options for a pool. */
-function RecyclerOptionsCard({ poolId, onMatch }: { poolId: string; onMatch: (recyclerId: string) => void }) {
-  const options = usePoolRecyclerOptions(poolId);
+function RecyclerOptionsCard({
+  poolId, enabled, onMatch,
+}: {
+  poolId: string;
+  enabled: boolean;
+  onMatch: (recyclerId: string) => void;
+}) {
+  const options = usePoolRecyclerOptions(poolId, { enabled });
   const [open, setOpen] = useState(false);
   if (options === undefined || options === null) return null;
   return (
