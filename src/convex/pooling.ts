@@ -197,7 +197,7 @@ export const updateMyLocation = mutation({
 export const myLocation = query({
   args: {},
   handler: async (ctx) => {
-    const profile = await requireCollector(ctx);
+    const profile = await requireCollectorRead(ctx);
     if (!profile) return null;
     return (
       (await ctx.db
@@ -208,11 +208,33 @@ export const myLocation = query({
   },
 });
 
+/**
+ * Resolve the signed-in profile WITHOUT throwing. Read models follow the
+ * `profiles.myProfile` pattern: an unauthenticated session resolves to
+ * `null` and the query returns its empty shape (null / []) instead of a
+ * server error. Previously a stale/expired-but-present auth token made
+ * getAuthUserId return null while the client still believed it was
+ * authenticated, so these queries THREW "Sign in required" during React
+ * render — the black screen on the Pooling page. Mutations still use the
+ * throwing `requireCollector` so real auth failures surface as toasts.
+ */
+async function requireCollectorRead(
+  ctx: { db: QueryCtx["db"] },
+): Promise<Doc<"profiles"> | null> {
+  const userId = await getAuthUserId(ctx as never);
+  if (userId === null) return null;
+  const profile = await ctx.db
+    .query("profiles")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .unique();
+  return profile ?? null;
+}
+
 /** Nearby POOLS read model — masked (no coordinates of other collectors). */
 export const nearbyPools = query({
   args: { materialCode: v.optional(v.string()), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const me = await requireCollector(ctx);
+    const me = await requireCollectorRead(ctx);
     if (!me) return [];
     const mine = await ctx.db
       .query("collectorLocations")
@@ -297,7 +319,7 @@ function approxBucketDistance(a: string, b: string): number {
 export const nearbyCollectors = query({
   args: { materialCode: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const me = await requireCollector(ctx);
+    const me = await requireCollectorRead(ctx);
     if (!me) return [];
     const mine = await ctx.db
       .query("collectorLocations")
@@ -829,7 +851,8 @@ async function poolWithDetail(
 export const myPools = query({
   args: {},
   handler: async (ctx) => {
-    const profile = await requireCollector(ctx);
+    const profile = await requireCollectorRead(ctx);
+    if (!profile) return [];
     const all = await ctx.db.query("pools").collect();
     const mine = [];
     for (const p of all) {
@@ -849,7 +872,8 @@ export const myPools = query({
 export const getPool = query({
   args: { poolId: v.id("pools") },
   handler: async (ctx, { poolId }) => {
-    const profile = await requireCollector(ctx);
+    const profile = await requireCollectorRead(ctx);
+    if (!profile) return null;
     const pool = await ctx.db.get(poolId);
     if (!pool) return null;
     return poolWithDetail(ctx, pool, profile._id);
@@ -860,7 +884,8 @@ export const getPool = query({
 export const myContributions = query({
   args: {},
   handler: async (ctx) => {
-    const profile = await requireCollector(ctx);
+    const profile = await requireCollectorRead(ctx);
+    if (!profile) return [];
     const rows = await ctx.db
       .query("poolContributions")
       .withIndex("by_collector", (q) => q.eq("collectorId", profile._id))
@@ -889,7 +914,8 @@ export const myContributions = query({
 export const myNotifications = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const profile = await requireCollector(ctx);
+    const profile = await requireCollectorRead(ctx);
+    if (!profile) return [];
     const rows = await ctx.db
       .query("poolNotifications")
       .withIndex("by_collector", (q) => q.eq("collectorId", profile._id))
