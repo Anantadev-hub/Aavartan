@@ -236,36 +236,39 @@ export const createLot = mutation({
       .unique();
     if (!m) throw new Error("Unknown material");
     // ---- §8/§9 price snapshot -------------------------------------------
-    // NEW lots always value against the LATEST applicable daily snapshot
-    // (today's row, else most recent earlier day). The exact row is frozen
-    // onto the lot — later market moves never rewrite this valuation (§9).
-    const snap = await latestRate(ctx, args.materialCode);
-    const baseRate = snap?.pricePerKg ?? m.currentPrice;
-    const rate = baseRate * (CONDITION_MULTIPLIER[args.condition] ?? 1);
-    const estimatedValue = Math.round(args.weight * rate);
-    const referenceId = await nextReferenceId(ctx);
-    // §9 provenance: the exact source of the frozen price, from the market
-    // provider when the snapshot was market-linked (never claimed live beyond
-    // its real source kind), else the pre-market board default. Discovery
-    // fields (Part 1 §6) ride along when today's snapshot exists.
+    // NEW lots always value against the LATEST applicable reference. Priority
+    // (Part 1 §3): a discovery snapshot built from REAL recycler quotes
+    // (pricingMethod recycler_quote_median) → latest daily market row (the
+    // labelled demo/reference feed) → board default. The exact provenance is
+    // frozen onto the lot (§9) — later market moves never rewrite it.
     const discovery = await ctx.db
       .query("priceSnapshots")
       .withIndex("by_material_day", (q) =>
         q.eq("materialCode", args.materialCode).eq("day", utcDayKey()),
       )
       .unique();
-    const priceSource =
-      snap?.source ?? `Board default — ${m.name} (demo)`;
-    const priceSourceName = discovery?.sourceName ?? priceSource;
-    const priceSourceKind = discovery
-      ? discovery.sourceKind === "recycler_quote"
-        ? ("recycler_quote" as const)
-        : ("demo" as const)
+    const quoteBased = discovery?.pricingMethod === "recycler_quote_median";
+    const snap = await latestRate(ctx, args.materialCode);
+    const baseRate = quoteBased
+      ? discovery!.pricePerKg
+      : snap?.pricePerKg ?? discovery?.pricePerKg ?? m.currentPrice;
+    const rate = baseRate * (CONDITION_MULTIPLIER[args.condition] ?? 1);
+    const estimatedValue = Math.round(args.weight * rate);
+    const referenceId = await nextReferenceId(ctx);
+    // §9 provenance: the exact source of the frozen price (Part 1 §6).
+    const priceSource = quoteBased
+      ? discovery!.sourceName
+      : snap?.source ?? `Board default — ${m.name} (demo)`;
+    const priceSourceName = quoteBased
+      ? discovery!.sourceName
+      : priceSource;
+    const priceSourceKind = quoteBased
+      ? ("recycler_quote" as const)
       : snap?.sourceKind ?? ("board-default" as const);
-    const pricingMethod = discovery
-      ? discovery.pricingMethod
+    const pricingMethod = quoteBased
+      ? discovery!.pricingMethod
       : ("board_default" as const);
-    const recyclerQuoteCount = discovery?.recyclerQuoteCount;
+    const recyclerQuoteCount = quoteBased ? discovery!.recyclerQuoteCount : 0;
     // Normalize AI confidence to the UI contract (0-100 integer) regardless of
     // what the client sent (§45: never trust client-provided AI values).
     const aiConfidenceNormalized =

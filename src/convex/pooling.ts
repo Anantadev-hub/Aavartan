@@ -21,7 +21,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 // ---------------------------------------------------------------------------
 
 const GEOHASH_PRECISION = 5; // ≈4.9 km × 4.9 km buckets
-const NEARBY_BUCKET_RADIUS = 1; // search own + adjacent ring (≈ up to ~10 km)
+
 
 const SUPPORTED_MATERIALS = new Set([
   "pcb", "lcd", "crt", "cable", "battery", "motor", "plastic",
@@ -84,18 +84,62 @@ export function distanceKm(
   return Math.round(2 * R * Math.asin(Math.sqrt(s)) * 10) / 10;
 }
 
-/** All neighbouring buckets at the ring radius (including own). */
-function neighboringHashes(hash: string, radius: number): string[] {
-  // Adjacency is approximated by prefix fan-out at a lower precision, which
-  // keeps the query to a small, index-friendly set of buckets (§21).
-  const lower = hash.slice(0, Math.max(1, hash.length - 1));
-  const neighbors = [lower];
-  const idx = BASE32.indexOf(lower[lower.length - 1]);
-  for (let d = 1; d <= radius * 8; d++) {
-    neighbors.push(`${lower.slice(0, -1)}${BASE32[(idx + d) % 32]}`);
-    neighbors.push(`${lower.slice(0, -1)}${BASE32[(idx - d + 32) % 32]}`);
+/**
+ * The indexed-search cell for a location: the precision-4 geohash key
+ * (≈ 39 km × 19.5 km). Nearby queries fan out over a small, index-friendly
+ * set of these cells (§21) instead of scanning the table.
+ */
+export function cell4(lat: number, lng: number): string {
+  return geohashEncode(lat, lng, 4);
+}
+
+/**
+ * Neighbouring precision-4 cells for a point: the 3×3 box around the own cell
+ * computed from the CELL CENTRES (correct box math, unlike naive prefix
+ * fan-out which drifts near cell borders). ~9 index lookups per query.
+ */
+function neighboringCells(lat: number, lng: number): string[] {
+  const own = geohashEncode(lat, lng, 4);
+  const cells = new Set<string>([own]);
+  // Decode the own cell's centre, then step ±cell dimensions.
+  let latRange = [-90.0, 90.0];
+  let lngRange = [-180.0, 180.0];
+  let even = true;
+  for (const ch of own) {
+    const idx = BASE32.indexOf(ch);
+    for (const bit of [16, 8, 4, 2, 1]) {
+      if (even) {
+        const mid = (lngRange[0] + lngRange[1]) / 2;
+        if ((idx & bit) !== 0) lngRange[0] = mid;
+        else lngRange[1] = mid;
+      } else {
+        const mid = (latRange[0] + latRange[1]) / 2;
+        if ((idx & bit) !== 0) latRange[0] = mid;
+        else latRange[1] = mid;
+      }
+      even = !even;
+    }
   }
-  return [...new Set(neighbors)];
+  const latMid = (latRange[0] + latRange[1]) / 2;
+  const lngMid = (lngRange[0] + lngRange[1]) / 2;
+  const dLat = latRange[1] - latRange[0];
+  const dLng = lngRange[1] - lngRange[0];
+  for (const ddy of [-1, 0, 1]) {
+    for (const ddx of [-1, 0, 1]) {
+      cells.add(geohashEncode(clampLat(latMid + ddy * dLat), clampLng(lngMid + ddx * dLng), 4));
+    }
+  }
+  return [...cells];
+}
+
+function clampLat(v: number): number {
+  return Math.max(-89.9, Math.min(89.9, v));
+}
+function clampLng(v: number): number {
+  let x = v;
+  while (x > 180) x -= 360;
+  while (x < -180) x += 360;
+  return x;
 }
 
 // ---- Location (§7/§8) -------------------------------------------------------
@@ -133,6 +177,7 @@ export const updateMyLocation = mutation({
       approximateLatitude: args.latitude,
       approximateLongitude: args.longitude,
       geohash: hash,
+      cell: cell4(args.latitude, args.longitude),
       geohashPrecision: GEOHASH_PRECISION,
       locality: args.locality.trim() || "Area not set",
       pincode: args.pincode?.trim(),
@@ -177,13 +222,13 @@ export const nearbyPools = query({
     const joinable = new Set(["OPEN", "FILLING"]);
     let candidates;
     if (mine) {
-      // Bucketed search (§21): own + adjacent coarse buckets, no full scan.
-      const buckets = neighboringHashes(mine.geohash, NEARBY_BUCKET_RADIUS);
+      // Bucketed search (§21): ~9 index lookups over the 3×3 cell box.
+      const cells = neighboringCells(mine.approximateLatitude, mine.approximateLongitude);
       const rows = [];
-      for (const b of buckets) {
+      for (const c of cells) {
         for (const p of await ctx.db
           .query("pools")
-          .withIndex("by_geohash", (q) => q.eq("geohash", b))
+          .withIndex("by_cell", (q) => q.eq("cell", c))
           .collect()) {
           rows.push(p);
         }
@@ -259,16 +304,16 @@ export const nearbyCollectors = query({
       .withIndex("by_collector", (q) => q.eq("collectorId", me._id))
       .unique();
 
-    const buckets = mine
-      ? neighboringHashes(mine.geohash, NEARBY_BUCKET_RADIUS)
-      : [];
     const rows = [];
-    for (const b of buckets) {
-      for (const loc of await ctx.db
-        .query("collectorLocations")
-        .withIndex("by_geohash", (q) => q.eq("geohash", b))
-        .collect()) {
-        rows.push(loc);
+    if (mine) {
+      const cells = neighboringCells(mine.approximateLatitude, mine.approximateLongitude);
+      for (const c of cells) {
+        for (const loc of await ctx.db
+          .query("collectorLocations")
+          .withIndex("by_cell", (q) => q.eq("cell", c))
+          .collect()) {
+          rows.push(loc);
+        }
       }
     }
     const out = [];
@@ -380,6 +425,7 @@ export const createPool = mutation({
       approximateArea: loc?.locality ?? "Delhi/NCR",
       transportCostEstimate: args.transportCostEstimate,
       geohash: loc?.geohash ?? geohashEncode(28.6139, 77.209, GEOHASH_PRECISION),
+      cell: loc?.cell ?? cell4(28.6139, 77.209),
       createdAt: now,
       updatedAt: now,
       expiresAt: now + 7 * 86_400_000,

@@ -477,7 +477,8 @@ const schema = defineSchema(
       collectorId: v.id("profiles"),
       approximateLatitude: v.number(),
       approximateLongitude: v.number(),
-      geohash: v.string(), // coarse bucket (default precision 5 ≈ 4.9km × 4.9km)
+      geohash: v.string(), // coarse bucket (precision 5 ≈ 4.9km × 4.9km)
+      cell: v.string(), // precision-4 key (≈ 39km × 19.5km) for indexed nearby search
       geohashPrecision: v.number(),
       locality: v.string(),
       pincode: v.optional(v.string()),
@@ -486,6 +487,7 @@ const schema = defineSchema(
     })
       .index("by_collector", ["collectorId"])
       .index("by_geohash", ["geohash"])
+      .index("by_cell", ["cell"])
       .index("by_optin", ["poolingOptIn"]),
 
     // A collector's declared intent to pool surplus material (§9). Distinct
@@ -521,6 +523,7 @@ const schema = defineSchema(
       approximateArea: v.string(),
       transportCostEstimate: v.optional(v.number()), // ₹, user/recycler-editable
       geohash: v.string(),
+      cell: v.string(), // precision-4 key for indexed nearby search (§21)
       createdAt: v.number(),
       updatedAt: v.number(),
       expiresAt: v.number(),
@@ -531,6 +534,7 @@ const schema = defineSchema(
        .index("by_material", ["materialCode"])
       .index("by_status", ["status"])
       .index("by_geohash", ["geohash"])
+      .index("by_cell", ["cell"])
       .index("by_recycler", ["preferredRecyclerId"]),
 
     // §12 per-collector contributions — traceable ownership, one lot per

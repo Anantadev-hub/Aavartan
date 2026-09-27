@@ -132,8 +132,8 @@ export const updateProfileName = mutation({
  * seeded facility and returns the updated profile — never creates duplicates.
  */
 export const ensureRecyclerBinding = mutation({
-  args: {},
-  handler: async (ctx): Promise<Doc<"profiles"> | null> => {
+  args: { recyclerName: v.optional(v.string()) },
+  handler: async (ctx, { recyclerName }): Promise<Doc<"profiles"> | null> => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return null;
     const profile = await ctx.db
@@ -141,10 +141,18 @@ export const ensureRecyclerBinding = mutation({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .unique();
     if (!profile || profile.role !== "recycler" || profile.recyclerId) return profile;
-    const green = await ctx.db
-      .query("recyclers")
-      .withIndex("by_name", (q) => q.eq("name", "GreenCycle Recycling"))
-      .unique();
+    const target = recyclerName
+      ? await ctx.db
+          .query("recyclers")
+          .withIndex("by_name", (q) => q.eq("name", recyclerName))
+          .unique()
+      : null;
+    const green =
+      target ??
+      (await ctx.db
+        .query("recyclers")
+        .withIndex("by_name", (q) => q.eq("name", "GreenCycle Recycling"))
+        .unique());
     if (!green) return profile;
     await ctx.db.patch(profile._id, { recyclerId: green._id, updatedAt: Date.now() });
     return ctx.db.get(profile._id);

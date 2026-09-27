@@ -342,15 +342,21 @@ const DEMO_QUOTES = [
 export const seedDemoQuotes = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const existing = await ctx.db.query("recyclerQuotes").first();
-    if (existing !== null) return { seeded: false };
     const now = Date.now();
+    let inserted = 0;
     for (const q of DEMO_QUOTES) {
       const facility = await ctx.db
         .query("recyclers")
         .withIndex("by_name", (x) => x.eq("name", q.facility))
         .unique();
       if (!facility) continue;
+      // Idempotent per facility × material: top up only missing demo quotes
+      // (test runs may have added/removed others — never duplicate).
+      const existing = await ctx.db
+        .query("recyclerQuotes")
+        .withIndex("by_recycler", (x) => x.eq("recyclerId", facility._id))
+        .collect();
+      if (existing.some((r) => r.materialCode === q.materialCode)) continue;
       await ctx.db.insert("recyclerQuotes", {
         recyclerId: facility._id,
         materialCode: q.materialCode,
@@ -365,10 +371,13 @@ export const seedDemoQuotes = internalMutation({
         createdAt: now,
         updatedAt: now,
       });
+      inserted += 1;
     }
-    // Recompute discovery snapshots so the board reflects the quotes.
-    await ctx.runMutation(internal.discovery.recomputeAllSnapshots, {});
-    return { seeded: true, quotes: DEMO_QUOTES.length };
+    if (inserted > 0) {
+      // Recompute discovery snapshots so the board reflects the quotes.
+      await ctx.runMutation(internal.discovery.recomputeAllSnapshots, {});
+    }
+    return { seeded: inserted > 0, quotes: inserted };
   },
 });
 
@@ -388,7 +397,20 @@ export const seedPoolingDemo = internalMutation({
   args: {},
   handler: async (ctx) => {
     const existingLoc = await ctx.db.query("collectorLocations").first();
-    if (existingLoc !== null) return { seeded: false };
+    if (existingLoc !== null) {
+      // Backfill: rows created before the indexed `cell` column existed.
+      for (const loc of await ctx.db.query("collectorLocations").collect()) {
+        if (!loc.cell) {
+          await ctx.db.patch(loc._id, { cell: geohashEncode(loc.approximateLatitude, loc.approximateLongitude, 4) });
+        }
+      }
+      for (const p of await ctx.db.query("pools").collect()) {
+        if (!p.cell) {
+          await ctx.db.patch(p._id, { cell: geohashEncode(28.5677, 77.2432, 4) });
+        }
+      }
+      return { seeded: false };
+    }
     const now = Date.now();
     let owner = await ctx.db.query("users").first();
     if (!owner) {
@@ -422,6 +444,7 @@ export const seedPoolingDemo = internalMutation({
         approximateLatitude: c.lat,
         approximateLongitude: c.lng,
         geohash: geohashEncode(c.lat, c.lng, 5),
+        cell: geohashEncode(c.lat, c.lng, 4),
         geohashPrecision: 5,
         locality: c.locality,
         locationUpdatedAt: now,
@@ -464,6 +487,7 @@ export const seedPoolingDemo = internalMutation({
         pickupWindow: dp.window,
         approximateArea: dp.area,
         geohash: geohashEncode(dp.owner.lat, dp.owner.lng, 5),
+        cell: geohashEncode(dp.owner.lat, dp.owner.lng, 4),
         createdAt: now - 86_400_000,
         updatedAt: now - 86_400_000,
         expiresAt: now + 6 * 86_400_000,

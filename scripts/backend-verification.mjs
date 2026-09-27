@@ -108,10 +108,12 @@ async function main() {
   );
 
   // ---- K/L: create lot → persistent unique lot ID + price snapshot ---------
-  const pcbBefore = await client.query(api.materials.latestDailyPrice, { materialCode: "pcb" });
+  // NOTE: uses "motor" (no demo recycler quotes) so these checks exercise the
+  // demo/reference-feed pricing path in isolation from quote discovery.
+  const feedBefore = await client.query(api.materials.latestDailyPrice, { materialCode: "motor" });
   const lot1 = await client.mutation(api.lots.createLot, {
     collectorId: profA._id,
-    materialCode: "pcb",
+    materialCode: "motor",
     weight: 10,
     condition: "good",
     photoDataUrl: "data:image/jpeg;base64,TESTIMAGE1",
@@ -131,8 +133,8 @@ async function main() {
   );
   report(
     "L. Lot retains image + AI + price fields",
-    lot1.estimatedValue === Math.round(10 * (pcbBefore?.pricePerKg ?? 410)),
-    `est ₹${lot1.estimatedValue} @ ₹${pcbBefore?.pricePerKg ?? 410}/kg`,
+    lot1.estimatedValue === Math.round(10 * (feedBefore?.pricePerKg ?? 105)),
+    `est ₹${lot1.estimatedValue} @ ₹${feedBefore?.pricePerKg ?? 105}/kg`,
   );
   const lotDetail = await client.query(api.lots.getLot, { lotId: lot1.lotId });
   report(
@@ -157,17 +159,17 @@ async function main() {
   // ---- N/O/P/Q: daily price update semantics -------------------------------
   const oldSnap = lotDetail.lot.pricePerKgAtCreation;
   const setRes = await client.mutation(api.materials.setDailyPrice, {
-    materialCode: "pcb",
+    materialCode: "motor",
     pricePerKg: 90,
     source: "demo",
   });
   report("N. Daily price updated", setRes.pricePerKg === 90, `day ${setRes.day}`);
-  const latestAfter = await client.query(api.materials.latestDailyPrice, { materialCode: "pcb" });
+  const latestAfter = await client.query(api.materials.latestDailyPrice, { materialCode: "motor" });
   report("O. Latest price now 90", latestAfter?.pricePerKg === 90);
 
   const lot2 = await client.mutation(api.lots.createLot, {
     collectorId: profA._id,
-    materialCode: "pcb",
+    materialCode: "motor",
     weight: 10,
     condition: "good",
     locationLabel: "Okhla, New Delhi (demo)",
@@ -236,9 +238,11 @@ async function main() {
   // quote first (the refresh re-bridges today's valuation row), then read the
   // record the pipeline actually accepted.
   await client.action(api.pricing.refreshAllPricesAction, {});
-  const pcbMarket = await client.query(api.pricing.currentMarketPrice, { materialCode: "pcb" });
+  // "motor" has no demo recycler quotes → the T-series exercises the
+  // demo/reference-feed path; the P-series below covers quote discovery.
+  const pcbMarket = await client.query(api.pricing.currentMarketPrice, { materialCode: "motor" });
   report(
-    "T1. Fetch current PCB price (market table)",
+    "T1. Fetch current demo-feed price (market table, motor)",
     !!pcbMarket && Number.isFinite(pcbMarket.pricePerKg) && pcbMarket.pricePerKg > 0,
     pcbMarket ? `₹${pcbMarket.pricePerKg}/kg` : "no record",
   );
@@ -257,9 +261,10 @@ async function main() {
   // Test 3+4: create a PCB lot and confirm the EXACT market price is frozen
   // (compare against the lot's own frozen snapshot — display values round to
   // whole rupees, so equality goes through the stored 1-decimal record).
+  // Uses "motor" (quote-less material) so this tests the DEMO-FEED path.
   const lot3 = await client.mutation(api.lots.createLot, {
     collectorId: profA._id,
-    materialCode: "pcb",
+    materialCode: "motor",
     weight: 10,
     condition: "good",
     locationLabel: "Okhla, New Delhi (demo)",
@@ -267,7 +272,7 @@ async function main() {
     sendNow: false,
   });
   report(
-    "T3. PCB lot created",
+    "T3. Demo-feed lot created",
     /^KC-\d{4}-\d{4,}$/.test(lot3.referenceId),
     `${lot3.referenceId} @ ₹${lot3.pricePerKg}/kg`,
   );
@@ -313,7 +318,7 @@ async function main() {
   // next day's drift, stamped as a current update (exactly what the daily
   // cron does when the next quote arrives; NOT future-dated).
   const sim = await client.mutation(api.pricing.simulateNextDailyPrice, {});
-  const nextPrice = await client.query(api.pricing.currentMarketPrice, { materialCode: "pcb" });
+  const nextPrice = await client.query(api.pricing.currentMarketPrice, { materialCode: "motor" });
   const todayKey = new Date().toISOString().slice(0, 10);
   report(
     "T7. Next daily price simulated + ingested",
@@ -325,7 +330,7 @@ async function main() {
   // Test 8: NEW lots must use the NEW price (exact stored record comparison).
   const lot4 = await client.mutation(api.lots.createLot, {
     collectorId: profA._id,
-    materialCode: "pcb",
+    materialCode: "motor",
     weight: 10,
     condition: "good",
     locationLabel: "Okhla, New Delhi (demo)",

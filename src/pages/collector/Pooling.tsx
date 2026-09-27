@@ -13,6 +13,7 @@ import {
   useUpdateMyLocation, useCreatePool, useJoinPool, useLeavePool,
   useSaveTransportEstimate, useMatchPoolToRecycler, useSchedulePickup,
   useCompletePool, useMyLots, useProfile, hasBackendId,
+  usePoolNotifications, useMarkNotificationsRead,
 } from "@/hooks/use-kc-data";
 import { cn } from "@/lib/utils";
 import PoolDetail from "./PoolDetail";
@@ -104,6 +105,8 @@ function PoolingMain({
   const nearby = useNearbyPools();
   const contributions = useMyContributions();
   const updateLocation = useUpdateMyLocation();
+  const notifications = usePoolNotifications();
+  const markRead = useMarkNotificationsRead();
   const [locating, setLocating] = useState(false);
   const [manualArea, setManualArea] = useState("");
   const [showManual, setShowManual] = useState(false);
@@ -213,6 +216,34 @@ function PoolingMain({
             </div>
           )}
         </ClayCard>
+
+        {/* In-app notifications (§18) */}
+        {notifications && notifications.length > 0 && (
+          <ClaySection title="Updates">
+            <div className="space-y-2">
+              {notifications.slice(0, 4).map((n) => (
+                <div
+                  key={n._id}
+                  className={cn(
+                    "clay-sm rounded-2xl px-3.5 py-2.5",
+                    !n.readAt && "ring-2 ring-teal/60",
+                  )}
+                >
+                  <p className="text-[13px] font-extrabold text-navy">{n.title}</p>
+                  <p className="text-[11.5px] leading-snug text-muted2">{n.body}</p>
+                </div>
+              ))}
+              {notifications.some((n) => !n.readAt) && (
+                <button
+                  onClick={() => void markRead({})}
+                  className="text-[12px] font-bold text-teal-deep"
+                >
+                  Mark all as read
+                </button>
+              )}
+            </div>
+          </ClaySection>
+        )}
 
         {/* Nearby pool opportunities */}
         <ClaySection title="Nearby pool opportunities">
