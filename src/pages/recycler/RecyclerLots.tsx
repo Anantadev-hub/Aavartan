@@ -55,7 +55,7 @@ export default function RecyclerLots({
           sub="New collector submissions will appear here."
         />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3">
           {incoming.map((lot: LotWithCollector) => {
             const mat = materials?.find((m) => m.code === lot.materialCode);
             return (

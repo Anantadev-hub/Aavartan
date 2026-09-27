@@ -1,225 +1,127 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router";
-import {
-  CheckIcon, ChevronRightIcon, CloudUpIcon, RecycleIcon, ShieldCheckIcon, SpeakerIcon, TrendUpIcon,
-} from "@/components/icons";
-import { ClayButton, ClayCard } from "@/components/ui/kit";
+import { RecycleIcon, ShieldCheckIcon, BuildingIcon } from "@/components/icons";
 import { useAppState } from "@/lib/app-state";
 import { LANGS, LANG_LABELS } from "@/lib/i18n";
-import { formatINR } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+/**
+ * App launch screen — a full-viewport mobile composition, not a website hero.
+ * The two CTAs deep-link into the EXISTING auth flow (/auth?role=…) unchanged.
+ */
 export default function Landing() {
   const { lang, setLang } = useAppState();
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-dvh bg-background">
-      {/* Top bar — wraps on ≤360px so the brand never clips */}
-      <header className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-2 gap-y-2 px-4 py-4 sm:px-6">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="clay flex size-11 shrink-0 items-center justify-center text-teal">
-            <RecycleIcon className="size-6" />
+    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-navy text-white">
+      {/* Ambient brand depth (decoration only) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(120%_90%_at_50%_0%,rgb(0_168_150/0.35)_0%,transparent_60%)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-24 -right-16 size-72 rounded-full bg-[#F4B942]/10 blur-2xl"
+      />
+
+      {/* Compact language row — app-style, top-right */}
+      <div className="relative z-10 flex items-center justify-end gap-1.5 px-4 pt-[max(env(safe-area-inset-top),12px)]">
+        {LANGS.map((l) => (
+          <button
+            key={l}
+            onClick={() => setLang(l)}
+            aria-label={`Switch language to ${LANG_LABELS[l]}`}
+            className={cn(
+              "min-h-11 rounded-full px-3 text-[12px] font-bold transition-colors",
+              lang === l
+                ? "bg-white text-[#0B1F3A]"
+                : "bg-white/10 text-white/80 active:bg-white/20",
+            )}
+          >
+            {LANG_LABELS[l]}
+          </button>
+        ))}
+      </div>
+
+      {/* Brand block */}
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pb-6">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45 }}
+          className="flex w-full max-w-sm flex-col items-center text-center"
+        >
+          <span className="flex size-20 items-center justify-center rounded-[26px] bg-white shadow-xl">
+            <RecycleIcon className="size-11 text-[#00786B]" />
           </span>
-          <div className="min-w-0">
-            <p className="truncate text-[15px] font-extrabold leading-tight text-navy">Aavartan</p>
-            <p className="truncate text-[11px] font-medium text-muted2">SIH 2026 · SIH26229</p>
+          <h1 className="mt-5 text-[34px] font-extrabold tracking-tight">Aavartan</h1>
+          <p className="mt-2 text-[15px] leading-snug text-white/75">
+            Connecting collectors with responsible recycling.
+          </p>
+
+          {/* Flow: Collector → Aavartan → Recycler */}
+          <div className="mt-8 flex w-full items-center justify-between gap-1 rounded-3xl bg-white/[0.07] p-4">
+            <div className="flex flex-1 flex-col items-center gap-1.5">
+              <span className="flex size-11 items-center justify-center rounded-2xl bg-[#F4B942]/20 text-[#F4B942]">
+                <RecycleIcon className="size-5" />
+              </span>
+              <span className="text-[11px] font-bold">Collector</span>
+            </div>
+            <FlowArrow />
+            <div className="flex flex-1 flex-col items-center gap-1.5">
+              <span className="flex size-11 items-center justify-center rounded-2xl bg-white text-[#0B1F3A]">
+                <RecycleIcon className="size-5" />
+              </span>
+              <span className="text-[11px] font-extrabold">Aavartan</span>
+            </div>
+            <FlowArrow />
+            <div className="flex flex-1 flex-col items-center gap-1.5">
+              <span className="flex size-11 items-center justify-center rounded-2xl bg-teal-500/20 text-teal-300">
+                <BuildingIcon className="size-5" />
+              </span>
+              <span className="text-[11px] font-bold">Recycler</span>
+            </div>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          {LANGS.map((l) => (
-            <button
-              key={l}
-              onClick={() => setLang(l)}
-              aria-label={`Switch language to ${LANG_LABELS[l]}`}
-              className={cn(
-                "rounded-xl px-2.5 py-1.5 text-xs font-bold clay-pressable",
-                lang === l
-                  ? "bg-navy text-white shadow-[var(--clay-1)]"
-                  : "bg-card text-muted2 shadow-[var(--clay-1)]",
-              )}
-            >
-              {LANG_LABELS[l]}
-            </button>
-          ))}
-        </div>
-      </header>
 
-      {/* Hero */}
-      <main className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
-        <div className="grid items-center gap-10 py-8 lg:grid-cols-2 lg:py-14">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <span className="clay-sm inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-xs font-bold text-teal-deep">
-              <ShieldCheckIcon className="size-4" />
-              Digital verification · Traceable lots · Fair prices
-            </span>
-            <h1 className="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight text-navy sm:text-5xl">
-              Bringing informal collectors into the{" "}
-              <span className="relative inline-block">
-                <span className="relative z-10">formal recycling chain</span>
-                <span
-                  aria-hidden
-                  className="absolute inset-x-0 bottom-0.5 z-0 h-3.5 -rotate-1 rounded-full bg-teal/25"
-                />
-              </span>
-              .
-            </h1>
-            <p className="mt-4 max-w-xl text-lg text-muted2">
-              Aavartan helps kabadiwalas identify e-waste, see fair indicative prices and sell to
-              verified recyclers — with a verified digital handover record for every transaction.
-            </p>
-
-            <div className="mt-7 flex flex-wrap gap-3">
-              <ClayButton size="lg" onClick={() => navigate("/auth?role=collector")}>
-                Start selling — Collector app
-                <ChevronRightIcon className="size-5" />
-              </ClayButton>
-              <ClayButton variant="navy" size="lg" onClick={() => navigate("/auth?role=recycler")}>
-                Recycler Portal
-              </ClayButton>
-            </div>
-
-            <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-semibold text-muted2">
-              <span className="inline-flex items-center gap-1.5">
-                <CheckIcon className="size-4.5 text-[var(--verified)]" /> Offline-first
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <SpeakerIcon className="size-4.5 text-teal" /> Hindi · मराठी · Voice prices
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <TrendUpIcon className="size-4.5 text-[var(--warning)]" /> Transparent price trends
-              </span>
-            </div>
-          </motion.div>
-
-          {/* Phone mock */}
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.12 }}
-            className="mx-auto w-full max-w-[400px]"
-          >
-            <div className="clay-lg rounded-[40px] p-3">
-              <div className="rounded-[32px] bg-background p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted2">
-                      Good afternoon 👋
-                    </p>
-                    <p className="text-lg font-extrabold text-navy">Turn your e-waste into value.</p>
-                  </div>
-                  <span className="clay-sm flex size-9 items-center justify-center text-teal">
-                    <RecycleIcon className="size-5" />
-                  </span>
-                </div>
-                <div className="clay mt-4 rounded-3xl p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted2">
-                    PCB — indicative
-                  </p>
-                  <div className="mt-1 flex items-end justify-between">
-                    <p className="text-3xl font-extrabold text-navy">
-                      {formatINR(410)}
-                      <span className="text-base font-bold text-muted2">/kg</span>
-                    </p>
-                    <span className="rounded-full bg-[#16A34A]/12 px-2.5 py-1 text-xs font-bold text-[#166534]">
-                      +4.2%
-                    </span>
-                  </div>
-                  <div className="mt-3 flex h-12 items-end gap-1.5">
-                    {[38, 44, 41, 50, 47, 55, 60].map((v, i) => (
-                      <span
-                        key={i}
-                        aria-hidden
-                        className="flex-1 rounded-lg bg-teal/70"
-                        style={{ height: `${(v / 60) * 100}%` }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  {[
-                    { l: "Lots sold", v: "18" },
-                    { l: "Earned", v: "₹41.2K" },
-                    { l: "Pending", v: "2" },
-                  ].map((s) => (
-                    <div key={s.l} className="clay-sm rounded-2xl px-2 py-2.5 text-center">
-                      <p className="text-[15px] font-extrabold text-navy">{s.v}</p>
-                      <p className="text-[10px] font-semibold text-muted2">{s.l}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-
-        {/* Value props */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            {
-              icon: <RecycleIcon className="size-6" />,
-              title: "AI material ID",
-              body: "Photograph e-waste and get a material + confidence score (demo inference).",
-            },
-            {
-              icon: <TrendUpIcon className="size-6" />,
-              title: "Fair prices",
-              body: "Live indicative rates, daily movement and 7/30/90-day trends.",
-            },
-            {
-              icon: <ShieldCheckIcon className="size-6" />,
-              title: "Verified handover",
-              body: "Two-sided digital handover record with reference + checksum.",
-            },
-            {
-              icon: <CloudUpIcon className="size-6" />,
-              title: "Offline-first",
-              body: "Capture lots with no network; auto-sync when you're back online.",
-            },
-          ].map((f) => (
-            <ClayCard key={f.title} className="rounded-3xl">
-              <div className="clay-sm mb-3 flex size-11 items-center justify-center text-teal">
-                {f.icon}
-              </div>
-              <p className="font-extrabold text-navy">{f.title}</p>
-              <p className="mt-1 text-sm text-muted2">{f.body}</p>
-            </ClayCard>
-          ))}
-        </div>
-
-        {/* Entry cards */}
-        <div className="mt-12 grid gap-4 sm:grid-cols-2">
-          <ClayCard className="rounded-3xl">
-            <p className="text-xs font-bold uppercase tracking-wider text-teal-deep">For collectors</p>
-            <p className="mt-1 text-xl font-extrabold text-navy">Aavartan collector app</p>
-            <p className="mt-1.5 text-sm text-muted2">
-              Photo → AI material ID → indicative value → recycler quotes → digital handover → earnings.
-            </p>
-            <ClayButton className="mt-4 w-full" onClick={() => navigate("/auth?role=collector")}>
-              Enter as Collector
-            </ClayButton>
-          </ClayCard>
-          <ClayCard className="rounded-3xl">
-            <p className="text-xs font-bold uppercase tracking-wider text-[var(--warning)]">For business</p>
-            <p className="mt-1 text-xl font-extrabold text-navy">Recycler portal</p>
-            <p className="mt-1.5 text-sm text-muted2">
-              Review incoming lots, send quotes, confirm handovers and complete payments.
-            </p>
-            <ClayButton variant="navy" className="mt-4 w-full" onClick={() => navigate("/auth?role=recycler")}>
-              Enter as Recycler
-            </ClayButton>
-          </ClayCard>
-        </div>
-
-        <p className="mt-10 text-center text-xs text-muted2">
-          Prototype — demo data and mock inference clearly labelled. No real government authorization IDs are
-          used anywhere in this build.
-        </p>
+          <p className="mt-5 flex items-center gap-1.5 text-[12px] font-semibold text-white/60">
+            <ShieldCheckIcon className="size-4" />
+            Verified handover records · Fair indicative prices
+          </p>
+        </motion.div>
       </main>
+
+      {/* Actions — docked to the thumb zone like an app */}
+      <div className="relative z-10 space-y-3 px-6 pb-[max(env(safe-area-inset-bottom),20px)]">
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          onClick={() => navigate("/auth?role=collector")}
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#F4B942] text-[16px] font-extrabold text-[#0B1F3A] shadow-lg transition-transform active:scale-[0.99]"
+        >
+          Get Started
+        </motion.button>
+        <button
+          onClick={() => navigate("/auth?role=recycler")}
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white/5 text-[15px] font-bold text-white transition-colors active:bg-white/10"
+        >
+          <BuildingIcon className="size-5" />
+          Recycler Portal
+        </button>
+        <p className="pt-1 text-center text-[11px] leading-snug text-white/45">
+          Prototype — demo data and mock inference clearly labelled.
+        </p>
+      </div>
     </div>
+  );
+}
+
+function FlowArrow() {
+  return (
+    <svg aria-hidden width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-white/35">
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
+    </svg>
   );
 }

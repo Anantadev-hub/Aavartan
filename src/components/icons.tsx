@@ -245,3 +245,10 @@ export const LayersIcon = (p: IconProps) => (
     <path d="m3 13 9 5 9-5" />
   </svg>
 );
+
+export const UserIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="8" r="4" />
+    <path d="M5 21c0-3.9 3.1-7 7-7s7 3.1 7 7" />
+  </svg>
+);

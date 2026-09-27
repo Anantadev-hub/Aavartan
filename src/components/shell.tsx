@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import {
-  HomeIcon, LotsIcon, PlusIcon, PriceTagIcon, WalletIcon,
+  HomeIcon, LotsIcon, PlusIcon, WalletIcon, UserIcon,
 } from "@/components/icons";
 import { useAppState } from "@/lib/app-state";
 import { SyncIndicator } from "@/components/ui/kit";
@@ -42,16 +42,16 @@ export function AppHeader({
   );
 }
 
-export type NavTab = "home" | "prices" | "add" | "lots" | "earnings";
+export type NavTab = "home" | "prices" | "add" | "lots" | "earnings" | "profile";
 
 export function BottomNav({ active, onNavigate }: { active: NavTab; onNavigate: (tab: NavTab) => void }) {
   const { t } = useAppState();
   const items: Array<{ tab: NavTab; label: string; icon: (p: { className?: string; strokeWidth?: number }) => ReactNode }> = [
     { tab: "home", label: t("nav.home"), icon: HomeIcon },
-    { tab: "prices", label: t("nav.prices"), icon: PriceTagIcon },
     { tab: "add", label: t("nav.add"), icon: PlusIcon },
     { tab: "lots", label: t("nav.lots"), icon: LotsIcon },
     { tab: "earnings", label: t("nav.earnings"), icon: WalletIcon },
+    { tab: "profile", label: t("nav.profile"), icon: UserIcon },
   ];  return (
     <nav
       aria-label="Primary"
@@ -66,7 +66,7 @@ export function BottomNav({ active, onNavigate }: { active: NavTab; onNavigate: 
               <button
                 onClick={() => onNavigate("add")}
                 aria-label={t("home.addEwaste")}
-                className="clay-btn-primary flex size-16 items-center justify-center rounded-[22px] shadow-lg clay-pressable"
+                className="flex size-16 items-center justify-center rounded-[22px] bg-[var(--teal)] text-white shadow-lg shadow-[rgb(0_120_107/0.35)] transition-transform active:scale-[0.98]"
               >
                 <PlusIcon className="size-8" strokeWidth={2.6} />
               </button>

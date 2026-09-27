@@ -77,7 +77,7 @@ export default function RecyclerTransactions({ recyclerId }: { recyclerId: Id<"r
       {rows.length === 0 ? (
         <EmptyState title="Nothing here yet" sub="Transactions appear as lots move through the pipeline." />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3">
           {rows.map((lot: LotWithCollector) => {
             const mat = materials?.find((m) => m.code === lot.materialCode);
             return (

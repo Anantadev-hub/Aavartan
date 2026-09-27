@@ -10,6 +10,7 @@ import { useAppState, useSyncWorker, setOnline } from "@/lib/app-state";
 import { useProfile, useProfileState, hasBackendId, usePendingProfileSync } from "@/hooks/use-kc-data";
 import { clearCache } from "@/lib/offline-cache";
 import CollectorHome from "./CollectorHome";
+import CollectorProfile from "./CollectorProfile";
 import CollectorPrices from "./CollectorPrices";
 import AddFlow from "./AddFlow";
 import CollectorLots from "./CollectorLots";
@@ -198,6 +199,7 @@ export default function CollectorApp() {
         )}
         {tab === "lots" && <CollectorLots onOpenLot={(id) => setOpenLotId(id as Id<"lots">)} />}
         {tab === "earnings" && <CollectorEarnings />}
+        {tab === "profile" && <CollectorProfile onOpenSafety={() => setOverlay({ kind: "safety" })} />}
       </main>
       <BottomNav active={tab} onNavigate={setTab} />
       <Toasts />

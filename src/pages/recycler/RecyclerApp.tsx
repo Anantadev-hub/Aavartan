@@ -7,10 +7,11 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
   BuildingIcon, GridIcon, LayersIcon, LogOutIcon, MapPinIcon, PhoneIcon, RecycleIcon,
-  ShieldCheckIcon, StarIcon, TruckIcon, ClockIcon, WalletIcon, PriceTagIcon,
+  ShieldCheckIcon, StarIcon, TruckIcon, ClockIcon, WalletIcon, PriceTagIcon, UserIcon,
 } from "@/components/icons";
 import { ClayButton, ClayCard, ClayBadge, LoadingState, OfflineBanner, Toasts, SyncIndicator } from "@/components/ui/kit";
-import { useAppState, setOnline, pushToast } from "@/lib/app-state";
+import { useAppState, setOnline, pushToast, setLang as applyLang } from "@/lib/app-state";
+import { LANGS, LANG_LABELS } from "@/lib/i18n";
 import { clearPendingProfile, clearLastAuth } from "@/lib/auth-service";
 import {
   useProfile, useProfileState, useRecyclerStats, useAvailableLots, useMaterials, useFacility,
@@ -25,7 +26,7 @@ import RecyclerLots from "./RecyclerLots";
 import RecyclerTransactions from "./RecyclerTransactions";
 import RecyclerQuotes from "./RecyclerQuotes";
 
-type Tab = "home" | "lots" | "deals" | "quotes" | "facility";
+type Tab = "home" | "lots" | "deals" | "quotes" | "facility" | "profile";
 
 function Redirect({ to }: { to: string }) {
   const navigate = useNavigate();
@@ -114,53 +115,39 @@ export default function RecyclerApp() {
 
   return (
     <div className="min-h-dvh bg-background pt-[env(safe-area-inset-top)]">
-      {/* Top header */}
-      <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-          <span className="clay flex size-10 items-center justify-center text-teal">
-            <RecycleIcon className="size-5" />
+      {/* Compact app bar — brand + facility identity + sync state */}
+      <header className="sticky top-0 z-40 bg-navy text-white shadow-md shadow-[rgb(11_31_58/0.18)]">
+        <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white">
+            <RecycleIcon className="size-5 text-[#00786B]" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-extrabold leading-tight text-navy">
-              Aavartan — Recycler Portal
-            </p>
-            <p className="flex items-center gap-1 text-[11px] font-semibold text-muted2">
-              {profile.name} (demo account)
-              <ShieldCheckIcon className="size-3.5 text-[var(--verified)]" />
+            <p className="truncate text-[15px] font-extrabold leading-tight">Aavartan</p>
+            <p className="flex items-center gap-1 truncate text-[11px] text-white/70">
+              {profile.name}
+              <ShieldCheckIcon className="size-3.5 shrink-0 text-[#7BD8CB]" />
             </p>
           </div>
           <SyncIndicator />
           <button
-            onClick={() => {
-              // §1: clear the session and return to login; the facility and
-              // all transaction data remain in the cloud.
-              void (async () => {
-                try {
-                  await signOut();
-                } catch {
-                  /* session already gone */
-                }
-                clearPendingProfile();
-                clearLastAuth();
-                clearCache();
-                navigate("/auth", { replace: true });
-              })();
-            }}
-            aria-label="Logout"
-            className="clay-sm flex size-10 items-center justify-center text-muted2 clay-pressable"
+            onClick={() => setTab("profile")}
+            aria-label="Open profile"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-[13px] font-extrabold uppercase transition-colors active:bg-white/20"
           >
-            <LogOutIcon className="size-5" />
+            {profile.name.trim()[0] ?? "R"}
           </button>
         </div>
       </header>
       <OfflineBanner />
 
-      <main className="mx-auto max-w-6xl px-4 pb-28 pt-4">
+      <main className="mx-auto w-full max-w-2xl px-4 pb-28 pt-4">
         {tab === "home" && <RecyclerDashboard recyclerId={recyclerId} bindingState={bindingState} onGoTab={setTab} />}
+        {/* Quotes stay reachable: primary entry from the Home quick action. */}
         {tab === "lots" && <RecyclerLots recyclerId={recyclerId} bindingState={bindingState} />}
         {tab === "deals" && <RecyclerTransactions recyclerId={recyclerId} />}
         {tab === "quotes" && <RecyclerQuotes recyclerId={recyclerId} bindingState={bindingState} />}
         {tab === "facility" && <RecyclerFacility recyclerId={recyclerId} bindingState={bindingState} />}
+        {tab === "profile" && <RecyclerProfile name={profile.name} />}
       </main>
 
       {/* Bottom nav — recycler */}
@@ -168,15 +155,15 @@ export default function RecyclerApp() {
         aria-label="Recycler primary"
         className="sticky bottom-0 z-40 border-t border-white/[0.08] bg-background/95 pb-[max(env(safe-area-inset-bottom),8px)] backdrop-blur"
       >
-        <div className="mx-auto grid max-w-6xl grid-cols-5 px-2 py-1.5">
+        <div className="mx-auto grid max-w-2xl grid-cols-5 px-2 py-1.5">
           {(
             [
-              { tab: "home", label: t("nav.home"), icon: GridIcon },
-              { tab: "lots", label: t("nav.lots"), icon: LayersIcon },
-              { tab: "deals", label: t("nav.deals"), icon: RecycleIcon },
-              { tab: "quotes", label: "Quotes", icon: PriceTagIcon },
-              { tab: "facility", label: t("nav.facility"), icon: BuildingIcon },
-            ] as const
+              { tab: "home" as const, label: t("nav.home"), icon: GridIcon },
+              { tab: "lots" as const, label: t("nav.lots"), icon: LayersIcon },
+              { tab: "deals" as const, label: t("nav.deals"), icon: RecycleIcon },
+              { tab: "facility" as const, label: t("nav.facility"), icon: BuildingIcon },
+              { tab: "profile" as const, label: t("nav.profile"), icon: UserIcon },
+            ]
           ).map((item) => (
             <button
               key={item.tab}
@@ -196,6 +183,74 @@ export default function RecyclerApp() {
         </div>
       </nav>
       <Toasts />
+    </div>
+  );
+}
+
+/* ------------------------------- Profile -------------------------------- */
+
+function RecyclerProfile({ name }: { name: string }) {
+  const { t, lang } = useAppState();
+  const { signOut } = useAuthActions();
+  const navigate = useNavigate();
+
+  const logout = () => {
+    // §1: clear the session and return to login; the facility and all
+    // transaction data remain in the cloud.
+    void (async () => {
+      try {
+        await signOut();
+      } catch {
+        /* session already gone */
+      }
+      clearPendingProfile();
+      clearLastAuth();
+      clearCache();
+      navigate("/auth", { replace: true });
+    })();
+  };
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-4 px-4 pb-6 pt-4">
+      <div className="flex items-center gap-3.5 rounded-3xl bg-navy p-4 text-white">
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white/15 text-lg font-extrabold uppercase">
+          {name.trim()[0] ?? "R"}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[16px] font-extrabold leading-tight">{name}</p>
+          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide">
+            Recycler account
+          </span>
+        </div>
+      </div>
+
+      <ClayCard className="rounded-3xl p-0">
+        <p className="px-4 pt-3.5 text-[11px] font-bold uppercase tracking-wider text-muted2">Language</p>
+        <div className="flex gap-2 p-3">
+          {LANGS.map((l) => (
+            <button
+              key={l}
+              onClick={() => applyLang(l)}
+              aria-pressed={lang === l}
+              className={cn(
+                "min-h-11 flex-1 rounded-2xl text-[13px] font-bold clay-pressable transition-colors",
+                lang === l ? "bg-navy text-white" : "bg-muted text-muted2",
+              )}
+            >
+              {LANG_LABELS[l]}
+            </button>
+          ))}
+        </div>
+      </ClayCard>
+
+      <button
+        onClick={logout}
+        className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-card text-[15px] font-bold text-[var(--danger)] shadow-[var(--clay-1)] clay-pressable"
+      >
+        <LogOutIcon className="size-5" /> Log out
+      </button>
+
+      <p className="pb-2 text-center text-[11px] text-muted2">Aavartan · prototype build</p>
     </div>
   );
 }
@@ -244,7 +299,7 @@ function RecyclerDashboard({
       )}
 
       {/* Stats */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         {[
           { l: "Available lots", v: stats ? String(stats.newLots) : "…", tone: "teal" as const, icon: <LayersIcon className="size-5" /> },
           { l: "Pending verification", v: stats ? String(stats.active) : "…", tone: "gold" as const, icon: <ClockIcon className="size-5" /> },
@@ -300,11 +355,11 @@ function RecyclerDashboard({
       {/* Incoming preview — §"New Lots Near You" */}
       <div className="flex items-center justify-between">
         <h2 className="text-[15px] font-bold uppercase tracking-wide text-navy">New lots near you</h2>
-        <ClayButton size="sm" variant="surface" onClick={() => onGoTab("lots")}>
-          View all
+        <ClayButton size="sm" variant="surface" onClick={() => onGoTab("quotes")}>
+          Buying quotes
         </ClayButton>
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3">
         {(incoming ?? []).slice(0, 4).map((lot: LotWithCollector) => {
           const mat = materials?.find((m) => m.code === lot.materialCode);
           return (
