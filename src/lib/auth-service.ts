@@ -33,7 +33,7 @@ export function formatMasked(mobile: string): string {
 
 const LAST_AUTH_KEY = "kc.lastAuth";
 
-export function saveLastAuth(v: { role: Role; name: string }) {
+export function saveLastAuth(v: { role: Role; name: string; phone?: string }) {
   try {
     localStorage.setItem(LAST_AUTH_KEY, JSON.stringify(v));
   } catch {
@@ -41,11 +41,11 @@ export function saveLastAuth(v: { role: Role; name: string }) {
   }
 }
 
-export function loadLastAuth(): { role: Role; name: string } | null {
+export function loadLastAuth(): { role: Role; name: string; phone?: string } | null {
   try {
     const raw = localStorage.getItem(LAST_AUTH_KEY);
     if (!raw) return null;
-    const v = JSON.parse(raw) as { role: Role; name: string };
+    const v = JSON.parse(raw) as { role: Role; name: string; phone?: string };
     if (v && (v.role === "collector" || v.role === "recycler") && typeof v.name === "string") {
       return v;
     }
@@ -158,6 +158,26 @@ export function clearPendingProfile() {
   } catch {
     /* private mode */
   }
+}
+
+/**
+ * Canonical phone form for identity matching: strips +91 / 91 / 0 prefixes and
+ * every non-digit, then validates as an Indian mobile (10 digits, 6–9 start).
+ * " +91 99999 99999 ", "919999999999" and "9999999999" all resolve identically.
+ */
+export function normalizePhone(raw: string | undefined | null): string | undefined {
+  if (!raw) return undefined;
+  let d = raw.replace(/\D/g, "");
+  if (d.length > 10 && d.startsWith("91")) d = d.slice(2);
+  if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return /^[6-9]\d{9}$/.test(d) ? d : undefined;
+}
+
+/** Casefold + collapse whitespace — for HARMLESS name differences only. */
+export function normalizeName(raw: string | undefined | null): string | undefined {
+  if (!raw) return undefined;
+  const n = raw.trim().replace(/\s+/g, " ").toLowerCase();
+  return n || undefined;
 }
 
 /** §1 Logout: forget the "Continue offline" hint (account data stays in the cloud). */

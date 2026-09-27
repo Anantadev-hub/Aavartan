@@ -3,6 +3,24 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
 
+// Phone normalization mirrors the client (lib/auth-service.ts): strip +91 / 91
+// / 0 prefixes and all non-digits, validate as an Indian mobile. Identity
+// matching MUST compare canonical forms — "+91 98765 43210", "919876543210"
+// and "9876543210" are the SAME account.
+function normalizePhoneBackend(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  let d = raw.replace(/\D/g, "");
+  if (d.length > 10 && d.startsWith("91")) d = d.slice(2);
+  if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return /^[6-9]\d{9}$/.test(d) ? d : undefined;
+}
+
+function normalizeNameBackend(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const n = raw.trim().replace(/\s+/g, " ").toLowerCase();
+  return n || undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Profiles — role selection lives here, clearly separate from auth. The demo
 // onboarding creates a profile with clearly-marked demo data (mock phone).
@@ -57,18 +75,60 @@ export const createProfile = mutation({
     }
 
     // §2 account dedupe: a returning user logging in from a fresh session
-    // (new anonymous user id) must rebind to their EXISTING account by phone
-    // instead of creating a second profile.
-    const normalizedPhone = phone && /^[6-9]\d{9}$/.test(phone.trim()) ? phone.trim() : undefined;
+    // (new anonymous user id) must rebind to their EXISTING account instead of
+    // creating a second profile — otherwise the returning Kabadiwala's session
+    // resolves a NEW collectorId and never sees the lots/quotes written
+    // against their original one.
+    //
+    // PRIMARY KEY: canonical phone. The by_phone index stores normalized
+    // digits; legacy rows may hold formatted strings ("+91 XXXXX XXXXX"), so
+    // fall back to a role-scoped canonical comparison when the index misses.
+    const normalizedPhone = normalizePhoneBackend(phone);
     if (normalizedPhone) {
       const byPhone = await ctx.db
         .query("profiles")
         .withIndex("by_phone", (q) => q.eq("phone", normalizedPhone))
         .collect();
-      const prior = byPhone.find((p) => p.role === role);
+      let prior = byPhone.find((p) => p.role === role);
+      if (!prior) {
+        // Legacy-format phones never match the normalized index — compare
+        // canonically across the (small) role cohort. Never fuzzy: exact
+        // normalized equality only.
+        const cohort = await ctx.db.query("profiles").collect();
+        prior = cohort.find(
+          (p) => p.role === role && normalizePhoneBackend(p.phone) === normalizedPhone,
+        );
+      }
       if (prior) {
         await ctx.db.patch(prior._id, {
           userId, // rebind to the current session's user row
+          name: name.trim() || prior.name,
+          phone: normalizedPhone, // canonicalize legacy formatting
+          preferredLanguage: preferredLanguage ?? prior.preferredLanguage,
+          collectionArea: collectionArea ?? prior.collectionArea,
+          updatedAt: Date.now(),
+        });
+        return (await ctx.db.get(prior._id))!;
+      }
+    } else if (name.trim()) {
+      // NO phone in the payload (e.g. "Continue offline" path): resolve the
+      // existing account by EXACT normalized name + role. Conservative by
+      // design — never fuzzy, never cross-role, never used when a phone is
+      // available (different people can share a name).
+      const wanted = normalizeNameBackend(name);
+      const cohort = await ctx.db.query("profiles").collect();
+      // Safety: a name-only match may only claim a profile that has NO usable
+      // phone of its own. A profile carrying a real phone is identified by
+      // that phone — a name collision must never merge two different people.
+      const prior = cohort.find(
+        (p) =>
+          p.role === role &&
+          !normalizePhoneBackend(p.phone) &&
+          normalizeNameBackend(p.name) === wanted,
+      );
+      if (prior) {
+        await ctx.db.patch(prior._id, {
+          userId,
           name: name.trim() || prior.name,
           preferredLanguage: preferredLanguage ?? prior.preferredLanguage,
           collectionArea: collectionArea ?? prior.collectionArea,

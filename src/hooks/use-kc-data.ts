@@ -201,7 +201,17 @@ export function usePendingProfileSync() {
               }
               await signIn("anonymous");
             }
-            await createProfile({ role: p.role, name: p.name });
+            // Identity fields ride along so the backend can resolve the
+            // EXISTING account (phone dedupe) instead of minting a second
+            // profile — without this, a returning Kabadiwala's new session
+            // queried a new collectorId and never saw their lots/quotes.
+            await createProfile({
+              role: p.role,
+              name: p.name,
+              phone: p.phone,
+              preferredLanguage: (p.language as "en" | "hi" | "mr" | undefined) ?? undefined,
+              collectionArea: p.area,
+            });
             if (!cancelled) markPendingProfileSynced();
           } catch {
             // Backend unreachable or transient failure: retry with backoff —

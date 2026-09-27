@@ -103,7 +103,7 @@ export default function LoginScreen() {
     if (data.language === "hi" || data.language === "mr") {
       applyLang(data.language);
     }
-    saveLastAuth({ role: r, name });
+    saveLastAuth({ role: r, name, phone: data.phone ?? mobile });
     applyLang((data.language as "en" | "hi" | "mr") ?? "en");
 
     // 2) Navigate to the app without any network dependency.
@@ -220,7 +220,10 @@ export default function LoginScreen() {
                           });
                           return;
                         }
-                        void finish(lastAuth.role, { name: lastAuth.name });
+                        void finish(lastAuth.role, {
+                          name: lastAuth.name,
+                          phone: lastAuth.phone,
+                        });
                       }}
                     >
                       <span
