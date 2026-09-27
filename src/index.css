@@ -155,8 +155,23 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* App-screen feel: never scroll sideways, ever. `clip` (not hidden) keeps
+     position: sticky working for the app bars. */
+  html,
+  body {
+    overflow-x: clip;
+  }
+  /* Native-app touch feel: no grey tap flash — pressed states are styled. */
+  button,
+  a,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior-y: none;
   }
   button:not([disabled]),
   [role="button"]:not([disabled]) {
@@ -169,6 +184,15 @@
   ::selection {
     background: var(--gold);
     color: #0b1f3a;
+  }
+  /* Motion is decoration only — users who opt out get instant states. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
@@ -282,12 +306,15 @@
       var(--gold) 30px 40px
     );
   }
+  /* App-screen canvas: edge-to-edge on phones (the viewport IS the app),
+     device-like frame only on large screens. Safe-area aware for standalone
+     PWA chrome (notches / gesture bars). */
   .phone-frame {
     max-width: 440px;
     margin-inline: auto;
     min-height: 100dvh;
     background: var(--background);
-    box-shadow: 0 24px 70px -18px rgb(11 31 58 / 0.28);
+    padding-top: env(safe-area-inset-top);
   }
   @media (min-width: 480px) {
     .phone-frame {
@@ -295,8 +322,15 @@
       margin-block: 24px;
       min-height: calc(100dvh - 48px);
       border: 1px solid rgb(11 31 58 / 0.08);
+      box-shadow: 0 24px 70px -18px rgb(11 31 58 / 0.28);
+      padding-top: 0;
       overflow: hidden;
       position: relative;
     }
+  }
+  /* Bottom-tab active pill shared by the collector + recycler nav bars. */
+  .tab-active {
+    background: var(--mint);
+    color: var(--teal-deep);
   }
 }

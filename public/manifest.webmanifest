@@ -4,14 +4,22 @@
   "description": "Aavartan — e-waste platform connecting collectors and verified recyclers",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "orientation": "portrait",
+  "background_color": "#F7F3EC",
   "theme_color": "#0B1F3A",
+  "categories": ["business", "environment", "utilities"],
   "icons": [
     {
       "src": "/logo.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }

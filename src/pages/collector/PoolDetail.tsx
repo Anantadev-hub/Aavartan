@@ -289,7 +289,7 @@ function JoinPicker({ poolId, materialCode, onDone }: { poolId: string; material
               }}
               className="clay-sm flex w-full items-center justify-between rounded-2xl p-3 text-left clay-pressable"
             >
-              <span className="text-[13.5px] font-extrabold text-navy">{l.referenceId}</span>
+              <span className="min-w-0 flex-1 truncate text-[13.5px] font-extrabold text-navy">{l.referenceId}</span>
               <span className="text-[13px] font-bold text-teal-deep">{formatKg(l.weight)}</span>
             </button>
           ))}

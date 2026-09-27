@@ -533,7 +533,7 @@ function CreatePoolForm({ onClose, onCreated }: { onClose: () => void; onCreated
                       lotId === l._id && "ring-2 ring-teal",
                     )}
                   >
-                    <span className="text-[14px] font-extrabold text-navy">
+                    <span className="min-w-0 flex-1 truncate text-[14px] font-extrabold text-navy">
                       {l.referenceId} · {l.materialCode.toUpperCase()}
                     </span>
                     <span className="text-[13px] font-bold text-teal-deep">{formatKg(l.weight)}</span>

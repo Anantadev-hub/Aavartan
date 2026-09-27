@@ -12,13 +12,15 @@ export function Timeline({ steps }: { steps: TimelineStep[] }) {
     <ol className="space-y-0">
       {steps.map((step, i) => (
         <li key={step.label} className="relative flex gap-3.5 pb-6 last:pb-0">
-          {/* connector */}
+          {/* connector — solid teal behind completed steps, dashed track ahead */}
           {i < steps.length - 1 && (
             <span
               aria-hidden
               className={cn(
                 "absolute left-[15px] top-8 h-[calc(100%-14px)] w-1 rounded-full",
-                step.state === "done" ? "bg-teal/70" : "bg-white/10",
+                step.state === "done"
+                  ? "bg-teal/70"
+                  : "bg-[repeating-linear-gradient(180deg,rgb(11_31_58/0.15)_0_4px,transparent_4px_8px)]",
               )}
             />
           )}
@@ -27,8 +29,8 @@ export function Timeline({ steps }: { steps: TimelineStep[] }) {
             className={cn(
               "relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full text-white",
               step.state === "done" && "bg-[var(--verified)] shadow-[var(--clay-1)]",
-              step.state === "pending" && "bg-[var(--pending)] shadow-[var(--clay-1)]",
-              step.state === "todo" && "bg-muted text-[#475569]",
+              step.state === "pending" && "bg-[var(--pending)] shadow-[var(--clay-1)] ring-4 ring-[var(--pending)]/20",
+              step.state === "todo" && "bg-muted text-[#475569] ring-1 ring-[var(--border)]",
             )}
           >
             {step.state === "done" ? (
@@ -38,7 +40,7 @@ export function Timeline({ steps }: { steps: TimelineStep[] }) {
             ) : step.state === "pending" ? (
               <span className="size-2.5 rounded-full bg-white/95" />
             ) : (
-              <span className="size-2 rounded-full bg-white/30" />
+              <span className="size-2 rounded-full bg-[#94A3B8]/50" />
             )}
           </span>
           <div className="min-w-0 flex-1 pt-0.5">

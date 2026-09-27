@@ -113,7 +113,7 @@ export default function RecyclerApp() {
   const recyclerId = profile.recyclerId ?? null;
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-dvh bg-background pt-[env(safe-area-inset-top)]">
       {/* Top header */}
       <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
@@ -166,7 +166,7 @@ export default function RecyclerApp() {
       {/* Bottom nav — recycler */}
       <nav
         aria-label="Recycler primary"
-        className="sticky bottom-0 z-40 border-t border-white/[0.08] bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
+        className="sticky bottom-0 z-40 border-t border-white/[0.08] bg-background/95 pb-[max(env(safe-area-inset-bottom),8px)] backdrop-blur"
       >
         <div className="mx-auto grid max-w-6xl grid-cols-5 px-2 py-1.5">
           {(
@@ -183,8 +183,8 @@ export default function RecyclerApp() {
               onClick={() => setTab(item.tab)}
               aria-current={tab === item.tab ? "page" : undefined}
               className={cn(
-                "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl clay-pressable",
-                tab === item.tab ? "text-teal-deep" : "text-muted2",
+                "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 clay-pressable transition-colors",
+                tab === item.tab ? "tab-active" : "text-muted2 hover:text-navy",
               )}
             >
               <item.icon className="size-6" strokeWidth={tab === item.tab ? 2.4 : 2} />
@@ -321,7 +321,7 @@ function RecyclerDashboard({
                   <p className="truncate text-[15px] font-extrabold text-navy">
                     {mat?.name ?? lot.materialCode} · {formatKg(lot.weight)}
                   </p>
-                  <p className="text-[11.5px] text-muted2">
+                  <p className="truncate text-[11.5px] text-muted2">
                     {lot.referenceId} · {lot.collectorName ?? "Collector"} · {timeAgo(lot.createdAt)}
                   </p>
                   <p className="mt-1 text-[13px] font-bold text-teal-deep">

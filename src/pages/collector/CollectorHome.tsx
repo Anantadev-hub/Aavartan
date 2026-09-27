@@ -1,5 +1,5 @@
 import {
-  ChevronRightIcon, LayersIcon, LotsIcon, MapPinIcon, PriceTagIcon, ShieldCheckIcon, SpeakerIcon,
+  ChevronRightIcon, ClockIcon, LayersIcon, LotsIcon, MapPinIcon, PriceTagIcon, ShieldCheckIcon, SpeakerIcon,
   TrendUpIcon, WalletIcon, WarningIcon,
 } from "@/components/icons";
 import { ClayButton, ClayCard, ClaySection } from "@/components/ui/kit";
@@ -39,16 +39,19 @@ export default function CollectorHome({ onNavigate, onOpenSafety, onOpenRecycler
         <p className="mt-1.5 text-sm leading-snug text-muted2">{t("home.sub")}</p>
       </div>
 
-      {/* Stat row */}
+      {/* Stat row — dashboard cards (lots / earnings / pending) */}
       <div className="grid grid-cols-3 gap-2.5">
         {[
-          { label: t("home.lotsSold"), value: summary ? String(summary.lotsSold) : "…" },
-          { label: t("home.totalEarned"), value: summary ? formatINR(summary.totalEarnings, { compact: true }) : "…" },
-          { label: t("home.pendingLots"), value: summary ? String(summary.pendingLots) : "…" },
+          { label: t("home.lotsSold"), value: summary ? String(summary.lotsSold) : "…", icon: <LotsIcon className="size-4" /> },
+          { label: t("home.totalEarned"), value: summary ? formatINR(summary.totalEarnings, { compact: true }) : "…", icon: <WalletIcon className="size-4" /> },
+          { label: t("home.pendingLots"), value: summary ? String(summary.pendingLots) : "…", icon: <ClockIcon className="size-4" /> },
         ].map((s) => (
-          <div key={s.label} className="clay-sm rounded-2xl px-3 py-3 text-center">
-            <p className="text-lg font-extrabold text-navy">{s.value}</p>
-            <p className="mt-0.5 text-[10.5px] font-semibold leading-tight text-muted2">{s.label}</p>
+          <div key={s.label} className="clay-sm rounded-2xl px-2 py-3 text-center">
+            <span className="mx-auto mb-1.5 flex size-7 items-center justify-center rounded-full bg-mint text-[var(--teal)]">
+              {s.icon}
+            </span>
+            <p className="text-lg font-extrabold leading-none text-navy">{s.value}</p>
+            <p className="mt-1 text-[10.5px] font-semibold leading-tight text-muted2">{s.label}</p>
           </div>
         ))}
       </div>

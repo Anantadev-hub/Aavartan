@@ -15,18 +15,18 @@ export default function Landing() {
 
   return (
     <div className="min-h-dvh bg-background">
-      {/* Top bar */}
-      <header className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-4 sm:px-6">
-        <div className="flex items-center gap-2.5">
-          <span className="clay flex size-11 items-center justify-center text-teal">
+      {/* Top bar — wraps on ≤360px so the brand never clips */}
+      <header className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-2 gap-y-2 px-4 py-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="clay flex size-11 shrink-0 items-center justify-center text-teal">
             <RecycleIcon className="size-6" />
           </span>
-          <div>
-            <p className="text-[15px] font-extrabold leading-tight text-navy">Aavartan</p>
-            <p className="text-[11px] font-medium text-muted2">SIH 2026 · SIH26229</p>
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-extrabold leading-tight text-navy">Aavartan</p>
+            <p className="truncate text-[11px] font-medium text-muted2">SIH 2026 · SIH26229</p>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           {LANGS.map((l) => (
             <button
               key={l}
