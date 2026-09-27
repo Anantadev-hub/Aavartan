@@ -66,8 +66,7 @@ export default function RecyclerTransactions({ recyclerId }: { recyclerId: Id<"r
             onClick={() => setFilter(f.key)}
             aria-pressed={filter === f.key}
             className={cn(
-              "rounded-xl px-3.5 py-2 text-[12.5px] font-bold clay-pressable",
-              filter === f.key ? "bg-navy text-teal" : "bg-card text-muted2 shadow-[var(--clay-1)]",
+              "rounded-xl px-3.5 py-2 text-[12.5px] font-bold clay-pressable",                filter === f.key ? "bg-navy text-white" : "bg-card text-muted2 shadow-[var(--clay-1)]",
             )}
           >
             {f.label} ({count(f.key)})
@@ -145,7 +144,7 @@ export default function RecyclerTransactions({ recyclerId }: { recyclerId: Id<"r
                     <p className="text-[12.5px] text-muted2">Reason: {lot.rejectionReason}</p>
                   )}
                   {lot.status === "sent" && (
-                    <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--pending)]">
+                    <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--warning)]">
                       <ClockIcon className="size-4" /> Awaiting your review in Available Lots
                     </p>
                   )}

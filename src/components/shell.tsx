@@ -21,7 +21,7 @@ export function AppHeader({
   onBack?: () => void;
 }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="flex min-h-14 items-center gap-2 px-4 py-2">
         {onBack && (
           <button
@@ -55,7 +55,7 @@ export function BottomNav({ active, onNavigate }: { active: NavTab; onNavigate: 
   return (
     <nav
       aria-label="Primary"
-      className="sticky bottom-0 z-40 mt-auto border-t border-white/[0.08] bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/85"
+      className="sticky bottom-0 z-40 mt-auto border-t border-[var(--border)] bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/85"
     >
       <div className="mx-auto grid max-w-md grid-cols-5 items-end px-2 pt-1.5">
         {items.map((item) =>

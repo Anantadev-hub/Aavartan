@@ -43,7 +43,9 @@ export default function SafetyGuide({ onClose }: { onClose: () => void }) {
                 <span
                   className={cn(
                     "clay-sm flex size-10 shrink-0 items-center justify-center",
-                    riskTone === "red" ? "text-[var(--danger)]" : "text-[var(--gold)]",
+                    riskTone === "red"
+                      ? "bg-[#DC2626]/10 text-[#B91C1C]"
+                      : "bg-[var(--gold)] text-[var(--navy)]",
                   )}
                 >
                   <WarningIcon className="size-5" />
@@ -71,7 +73,7 @@ export default function SafetyGuide({ onClose }: { onClose: () => void }) {
                     </div>
                   ))}
                   <p className="flex items-center gap-1.5 pt-1 text-[10.5px] text-muted2">
-                    <WarningIcon className="size-3.5 shrink-0 text-[var(--gold)]" />
+                    <WarningIcon className="size-3.5 shrink-0 text-[var(--warning)]" />
                     Demo content — validate with CPCB/EPA guidance before production use.
                   </p>
                 </div>

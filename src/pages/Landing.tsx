@@ -35,7 +35,7 @@ export default function Landing() {
               className={cn(
                 "rounded-xl px-2.5 py-1.5 text-xs font-bold clay-pressable",
                 lang === l
-                  ? "bg-navy text-teal shadow-[var(--clay-1)]"
+                  ? "bg-navy text-white shadow-[var(--clay-1)]"
                   : "bg-card text-muted2 shadow-[var(--clay-1)]",
               )}
             >
@@ -91,7 +91,7 @@ export default function Landing() {
                 <SpeakerIcon className="size-4.5 text-teal" /> Hindi · मराठी · Voice prices
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <TrendUpIcon className="size-4.5 text-[var(--gold)]" /> Transparent price trends
+                <TrendUpIcon className="size-4.5 text-[var(--warning)]" /> Transparent price trends
               </span>
             </div>
           </motion.div>
@@ -125,7 +125,7 @@ export default function Landing() {
                       {formatINR(410)}
                       <span className="text-base font-bold text-muted2">/kg</span>
                     </p>
-                    <span className="rounded-full bg-[#064E3B] px-2.5 py-1 text-xs font-bold text-[var(--verified)]">
+                    <span className="rounded-full bg-[#16A34A]/12 px-2.5 py-1 text-xs font-bold text-[#166534]">
                       +4.2%
                     </span>
                   </div>
@@ -204,7 +204,7 @@ export default function Landing() {
             </ClayButton>
           </ClayCard>
           <ClayCard className="rounded-3xl">
-            <p className="text-xs font-bold uppercase tracking-wider text-[var(--gold)]">For business</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-[var(--warning)]">For business</p>
             <p className="mt-1 text-xl font-extrabold text-navy">Recycler portal</p>
             <p className="mt-1.5 text-sm text-muted2">
               Review incoming lots, send quotes, confirm handovers and complete payments.

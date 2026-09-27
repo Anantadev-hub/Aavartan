@@ -137,7 +137,7 @@ export default function CollectorHome({ onNavigate, onOpenSafety, onOpenRecycler
       {/* Safety card */}
       <ClayCard className="rounded-3xl border-l-4 border-[var(--gold)]">
         <div className="flex items-start gap-3">
-          <span className="clay-sm flex size-10 shrink-0 items-center justify-center text-[var(--gold)]">
+          <span className="clay-sm flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--gold)] text-[var(--navy)]">
             <WarningIcon className="size-5" />
           </span>
           <div className="min-w-0 flex-1">

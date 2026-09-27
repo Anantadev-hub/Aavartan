@@ -133,7 +133,7 @@ export default function FindRecycler({
               aria-pressed={sort === f.key}
               className={cn(
                 "shrink-0 rounded-xl px-3 py-2 text-[12px] font-bold clay-pressable",
-                sort === f.key ? "bg-navy text-teal" : "bg-card text-muted2 shadow-[var(--clay-1)]",
+                sort === f.key ? "bg-navy text-white" : "bg-card text-muted2 shadow-[var(--clay-1)]",
               )}
             >
               {f.label}
@@ -183,7 +183,7 @@ export default function FindRecycler({
                       <MapPinIcon className="size-3.5" /> {r.distanceKm} km
                     </span>
                     <span className="inline-flex items-center gap-0.5">
-                      <StarIcon className="size-3.5 text-[var(--gold)]" /> {r.rating}
+                      <StarIcon className="size-3.5 text-[var(--warning)]" /> {r.rating}
                     </span>
                     {r.pickupAvailable && (
                       <span className="inline-flex items-center gap-0.5 text-teal-deep">
@@ -230,7 +230,7 @@ export default function FindRecycler({
                   {r.matchReasons.map((reason) => (
                     <span
                       key={reason}
-                      className="rounded-full bg-[#064E3B]/60 px-2 py-0.5 text-[10px] font-bold text-teal"
+                      className="rounded-full bg-mint px-2 py-0.5 text-[10px] font-bold text-[var(--teal)]"
                     >
                       {reason}
                     </span>

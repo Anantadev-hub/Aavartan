@@ -274,14 +274,14 @@ function ReviewLot({
                   className={cn(
                     "rounded-full px-2 py-0.5",
                     meter.wording === "Within typical range"
-                      ? "bg-[#064E3B] text-teal"
-                      : "bg-[#451A03] text-[var(--pending)]",
+                      ? "bg-mint text-[var(--teal)]"
+                      : "bg-[var(--gold)] text-[var(--navy)]",
                   )}
                 >
                   {meter.wording}
                 </span>
               </div>
-              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#20242D]">
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full clay-track">
                 <div
                   className={cn(
                     "h-full rounded-full",
@@ -311,7 +311,7 @@ function ReviewLot({
             </div>
           )}
           {numPrice > 0 && mat && numPrice > mat.currentPrice * 2.5 && (
-            <p className="mt-2 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[12.5px] font-semibold text-[var(--pending)]">
+            <p className="mt-2 rounded-2xl bg-[var(--gold)] px-3.5 py-2.5 text-[12.5px] font-semibold text-[var(--navy)]">
               Review recommended: quote is far above the indicative market rate.
             </p>
           )}
@@ -324,7 +324,7 @@ function ReviewLot({
             </ClayButton>
           </div>
           {!recyclerId && (
-            <p className="mt-2 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[12.5px] font-semibold text-[var(--pending)]">
+            <p className="mt-2 rounded-2xl bg-[var(--gold)] px-3.5 py-2.5 text-[12.5px] font-semibold text-[var(--navy)]">
               Facility binding still syncing — quoting is disabled until it lands.
             </p>
           )}

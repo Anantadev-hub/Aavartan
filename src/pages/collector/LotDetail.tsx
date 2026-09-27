@@ -162,7 +162,7 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
           )}
         </div>
         {lot.status === "rejected" && (
-          <p className="mt-3 rounded-2xl bg-red-50 px-3.5 py-2.5 text-[13px] font-semibold text-[var(--danger)]">
+          <p className="mt-3 rounded-2xl bg-[#DC2626]/10 px-3.5 py-2.5 text-[13px] font-semibold text-[var(--danger)]">
             Rejected: {lot.rejectionReason}
           </p>
         )}
@@ -174,18 +174,18 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
                 className={cn(
                   "rounded-full px-2 py-0.5",
                   meter.wording === "Within typical range"
-                    ? "bg-[#064E3B] text-teal"
-                    : "bg-[#451A03] text-[var(--pending)]",
+                    ? "bg-mint text-[var(--teal)]"
+                    : "bg-[var(--gold)] text-[var(--navy)]",
                 )}
               >
                 {meter.wording}
               </span>
             </div>
-            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#20242D]">
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full clay-track">
               <div
                 className={cn(
                   "h-full rounded-full",
-                  meter.wording === "Within typical range" ? "bg-teal" : "bg-[var(--gold)]",
+                  meter.wording === "Within typical range" ? "bg-teal" : "bg-[var(--amber-deep)]",
                 )}
                 style={{
                   width: `${Math.max(
@@ -237,7 +237,7 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
                   })}
                   size={132}
                   bgColor="#ffffff"
-                  fgColor="#1A1D24"
+                  fgColor="#0B1F3A"
                 />
               </div>
               <div className="space-y-1.5 text-[12.5px]">
@@ -248,7 +248,7 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
                 <Row ok label={t("handover.locationRecorded")} value={lot.locationLabel} />
                 <Row ok label="Integrity checksum (demo)" value={lot.handoverHash?.slice(0, 12) ?? "—"} />
               </div>
-              <p className="rounded-2xl bg-[#064E3B] px-3.5 py-2.5 text-[12px] font-semibold text-teal">
+              <p className="rounded-2xl bg-mint px-3.5 py-2.5 text-[12px] font-semibold text-[var(--teal)]">
                 Verified Digital Handover — tamper-evident concept demo (checksum, not cryptographic).
               </p>
             </div>
@@ -266,7 +266,7 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
                 </ClayButton>
               )}
               {lot.handoverConfirmedByCollector && !lot.handoverConfirmedByRecycler && (
-                <p className="mt-2 flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--pending)]">
+                <p className="mt-2 flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--warning)]">
                   <ClockIcon className="size-4" /> Waiting for recycler confirmation
                 </p>
               )}
@@ -293,7 +293,7 @@ export default function LotDetail({ lotId, onBack }: { lotId: Id<"lots"> | strin
 
       {/* Anomaly flags (transparent, non-accusatory) */}
       {anomalyFlags.length > 0 && (
-        <ClayCard className="rounded-3xl border-l-4 border-[var(--pending)]">
+        <ClayCard className="rounded-3xl border-l-4 border-[var(--amber-deep)]">
           <p className="text-[13px] font-extrabold text-navy">Review recommended</p>
           {anomalyFlags.map((f) => (
             <p key={f._id} className="mt-1.5 text-[12.5px] text-muted2">

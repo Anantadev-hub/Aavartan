@@ -28,7 +28,7 @@ export function Timeline({ steps }: { steps: TimelineStep[] }) {
               "relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full text-white",
               step.state === "done" && "bg-[var(--verified)] shadow-[var(--clay-1)]",
               step.state === "pending" && "bg-[var(--pending)] shadow-[var(--clay-1)]",
-              step.state === "todo" && "bg-[#20242D] text-[#8E95A5]",
+              step.state === "todo" && "bg-muted text-[#475569]",
             )}
           >
             {step.state === "done" ? (

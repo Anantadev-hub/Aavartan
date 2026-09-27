@@ -130,7 +130,7 @@ export default function PoolDetail({
           </div>
           <div className="clay-track mt-3 h-4 overflow-hidden rounded-full">
             <div
-              className="h-full rounded-full bg-[linear-gradient(90deg,#047857,#10B981)] transition-all"
+              className="h-full rounded-full bg-teal transition-all"
               style={{ width: `${Math.max(6, pct)}%` }}
             />
           </div>

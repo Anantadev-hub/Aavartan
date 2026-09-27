@@ -98,7 +98,7 @@ export default function CollectorEarnings() {
       </ClayCard>
 
       {/* Summary */}
-      <ClayCard className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,#064E3B_0%,#047857_50%,#10B981_100%)] text-white">
+      <ClayCard className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,#0B1F3A_0%,#00564E_50%,#00786B_100%)] text-white">
         <p className="text-[11px] font-bold uppercase tracking-wider text-white/70">{t("earnings.total")}</p>
         <p className="mt-1 text-4xl font-extrabold">
           {formatINR(summary.totalEarnings)}
@@ -198,7 +198,7 @@ export default function CollectorEarnings() {
                 aria-pressed={simWeight === w}
                 className={cn(
                   "min-h-10 rounded-xl px-3.5 text-[12.5px] font-bold clay-pressable",
-                  simWeight === w ? "bg-navy text-teal" : "bg-card text-muted2 shadow-[var(--clay-1)]",
+                  simWeight === w ? "bg-navy text-white" : "bg-card text-muted2 shadow-[var(--clay-1)]",
                 )}
               >
                 {w} kg
@@ -212,16 +212,16 @@ export default function CollectorEarnings() {
                   <p className="text-[10px] font-bold uppercase text-muted2">Mixed sale</p>
                   <p className="text-lg font-extrabold text-navy">{formatINR(sim.mixedSale)}</p>
                 </div>
-                <div className="rounded-2xl bg-[#064E3B] px-3 py-2.5 text-center">
-                  <p className="text-[10px] font-bold uppercase text-teal/80">Sorted sale</p>
+                <div className="rounded-2xl bg-mint px-3 py-2.5 text-center">
+                  <p className="text-[10px] font-bold uppercase text-[var(--teal)]/80">Sorted sale</p>
                   <p className="text-lg font-extrabold text-teal">{formatINR(sim.sortedSale)}</p>
                 </div>
               </div>
-              <div className="mt-2 flex items-center justify-between rounded-2xl bg-[#451A03] px-3.5 py-2.5">
-                <p className="text-[12.5px] font-semibold text-[var(--pending)]">
+              <div className="mt-2 flex items-center justify-between rounded-2xl bg-[var(--gold)] px-3.5 py-2.5">
+                <p className="text-[12.5px] font-semibold text-[var(--navy)]">
                   Potential extra by sorting
                 </p>
-                <p className="text-[15px] font-extrabold text-[var(--gold)]">
+                <p className="text-[15px] font-extrabold text-[var(--navy)]">
                   +{formatINR(sim.potentialDifference)}
                 </p>
               </div>

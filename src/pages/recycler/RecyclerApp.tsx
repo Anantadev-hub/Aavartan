@@ -217,7 +217,7 @@ function RecyclerDashboard({
                 className={cn(
                   "clay-sm flex size-10 items-center justify-center",
                   s.tone === "teal" && "text-teal",
-                  s.tone === "gold" && "text-[var(--gold)]",
+                  s.tone === "gold" && "rounded-full bg-[var(--gold)] text-[var(--navy)]",
                   s.tone === "navy" && "text-navy",
                 )}
               >
@@ -240,9 +240,9 @@ function RecyclerDashboard({
           {(heatmap?.areas ?? []).slice(0, 5).map((a) => (
             <div key={a._id} className="flex items-center gap-3">
               <span className="w-28 shrink-0 truncate text-[12.5px] font-bold text-navy">{a.area}</span>
-              <div className="h-3 flex-1 overflow-hidden rounded-full bg-[#20242D]">
+              <div className="h-3 flex-1 overflow-hidden rounded-full clay-track">
                 <div
-                  className="h-full rounded-full bg-[linear-gradient(90deg,#047857,#10B981)]"
+                  className="h-full rounded-full bg-teal"
                   style={{ width: `${Math.max(8, Math.round(a.intensity * 100))}%` }}
                 />
               </div>

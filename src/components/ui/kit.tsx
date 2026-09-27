@@ -94,13 +94,13 @@ export function ClayBadge({
 }) {
   const tones: Record<string, string> = {
     neutral: "bg-muted text-muted-foreground",
-    teal: "bg-[#064E3B] text-[var(--teal)]",
-    gold: "bg-[#451A03] text-[var(--gold)]",
-    green: "bg-[#064E3B] text-[var(--verified)]",
-    amber: "bg-[#451A03] text-[var(--pending)]",
-    red: "bg-[#7F1D1D]/40 text-[var(--danger)]",
-    blue: "bg-[#1E3A8A] text-[var(--info)]",
-    navy: "bg-navy text-teal",
+    teal: "bg-mint text-[var(--teal)]",
+    gold: "bg-[var(--gold)] text-[var(--navy)]",
+    green: "bg-[#16A34A]/12 text-[#166534]",
+    amber: "bg-[var(--gold)]/30 text-[var(--warning)]",
+    red: "bg-[#DC2626]/10 text-[#B91C1C]",
+    blue: "bg-[#2563EB]/10 text-[#1D4ED8]",
+    navy: "bg-navy text-white",
   };
   return (
     <span
@@ -199,7 +199,7 @@ export function OfflineBanner() {
   const { online, t, queue } = useAppState();
   if (online) return null;
   return (
-    <div className="mx-4 mb-2 flex items-center gap-2 rounded-2xl bg-amber-50 px-3.5 py-2.5 text-[13px] font-semibold text-amber-700 shadow-[var(--clay-1)]">
+    <div className="mx-4 mb-2 flex items-center gap-2 rounded-2xl bg-[var(--gold)]/30 px-3.5 py-2.5 text-[13px] font-semibold text-[var(--warning)] shadow-[var(--clay-1)]">
       <CloudOffIcon className="size-4.5" />
       <span>
         {t("common.offline")} — {t("add.offlineNote")}
@@ -229,7 +229,7 @@ export function SyncIndicator() {
     <span
       className={cn(
         "inline-flex items-center gap-1.5 text-xs font-semibold",
-        online ? "text-[var(--verified)]" : "text-[var(--pending)]",
+        online ? "text-[var(--verified)]" : "text-[var(--warning)]",
       )}
     >
       {online ? <CloudUpIcon className="size-4" /> : <CloudOffIcon className="size-4" />}

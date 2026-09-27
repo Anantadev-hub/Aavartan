@@ -292,7 +292,7 @@ export default function CollectorPrices() {
                     aria-pressed={days === d}
                     className={cn(
                       "rounded-xl px-2.5 py-1.5 text-[11.5px] font-bold clay-pressable",
-                      days === d ? "bg-navy text-teal" : "bg-muted text-muted2",
+                      days === d ? "bg-navy text-white" : "bg-muted text-muted2",
                     )}
                   >
                     {d}d

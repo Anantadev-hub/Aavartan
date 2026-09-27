@@ -270,18 +270,18 @@ export default function AddFlow({
             </div>
             {/* Honest source label (spec §42): live Roboflow vs demo fallback. */}
             {ai.isDemoFallback && (
-              <p className="mt-3 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--pending)]">
+              <p className="mt-3 rounded-2xl bg-[var(--gold)] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--navy)]">
                 {ai.demoNote ?? "AI service unavailable — using demo prediction."}
               </p>
             )}
             {!ai.isDemoFallback && !ai.supported && (
-              <p className="mt-3 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--pending)]">
+              <p className="mt-3 rounded-2xl bg-[var(--gold)] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--navy)]">
                 Detected “{ai.detectedClass ?? "unknown"}” ({Math.round(ai.confidence * 100)}%) —
                 not in the supported list. Please choose the material below.
               </p>
             )}
             {ai.supported && ai.confidence < 0.7 && (
-              <p className="mt-3 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--pending)]">
+              <p className="mt-3 rounded-2xl bg-[var(--gold)] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--navy)]">
                 {t("add.lowConfidence")}
               </p>
             )}
@@ -425,7 +425,7 @@ export default function AddFlow({
           </ClayCard>
 
           {!online && (
-            <p className="flex items-center gap-2 rounded-2xl bg-[#451A03] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--pending)]">
+            <p className="flex items-center gap-2 rounded-2xl bg-[var(--gold)] px-3.5 py-2.5 text-[13px] font-semibold text-[var(--navy)]">
               <WarningIcon className="size-4 shrink-0" />
               {t("add.offlineNote")}
             </p>
