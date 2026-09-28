@@ -1,3 +1,5 @@
+import { useAppState } from "@/lib/app-state";
+import { timelineEventDescription, timelineEventLabel } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type TimelineStep = {
@@ -5,13 +7,23 @@ export type TimelineStep = {
   timestamp: number | null;
   state: "done" | "pending" | "todo";
   description: string;
+  /** Server event code. When present, label/description are localized here. */
+  code?: string;
+  /** The quoted event was a rejection, so the label reads "Rejected by recycler". */
+  rejected?: boolean;
 };
 
 export function Timeline({ steps }: { steps: TimelineStep[] }) {
+  const { lang, t } = useAppState();
   return (
     <ol className="space-y-0">
-      {steps.map((step, i) => (
-        <li key={step.label} className="relative flex gap-3.5 pb-6 last:pb-0">
+      {steps.map((step, i) => {
+        const label = step.code ? timelineEventLabel(lang, step.code, step.rejected) : step.label;
+        const description = step.code
+          ? timelineEventDescription(lang, step.code, step.description)
+          : step.description;
+        return (
+        <li key={step.code ?? label} className="relative flex gap-3.5 pb-6 last:pb-0">
           {/* connector — solid teal behind completed steps, dashed track ahead */}
           {i < steps.length - 1 && (
             <span
@@ -46,20 +58,21 @@ export function Timeline({ steps }: { steps: TimelineStep[] }) {
           <div className="min-w-0 flex-1 pt-0.5">
             <div className="flex items-baseline justify-between gap-2">
               <p className={cn("text-[15px] font-bold", step.state === "todo" ? "text-muted2" : "text-navy")}>
-                {step.label}
+                {label}
               </p>
               <span className="shrink-0 text-xs text-muted2">
                 {step.timestamp
                   ? new Date(step.timestamp).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit", hour12: true })
                   : step.state === "pending"
-                    ? "In progress"
+                    ? t("tl.inProgress")
                     : ""}
               </span>
             </div>
-            <p className="mt-0.5 text-[13px] leading-snug text-muted2">{step.description}</p>
+            <p className="mt-0.5 text-[13px] leading-snug text-muted2">{description}</p>
           </div>
         </li>
-      ))}
+        );
+      })}
     </ol>
   );
 }
@@ -74,6 +87,7 @@ export function TrendChart({
   height?: number;
   stroke?: string;
 }) {
+  const { t } = useAppState();
   if (points.length < 2) {
     return <div className="clay-track h-[120px]" />;
   }
@@ -90,14 +104,14 @@ export function TrendChart({
 
   return (
     <div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" role="img" aria-label="Price trend chart">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" role="img" aria-label={t("tl.chartAria")}>
         <path d={area} fill={stroke} opacity="0.12" />
         <path d={path} fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
         <circle cx={px(points.length - 1)} cy={py(last)} r="4.5" fill={stroke} />
       </svg>
       <div className="mt-1 flex justify-between text-[11px] text-muted2">
-        <span>start</span>
-        <span>now</span>
+        <span>{t("handover.start")}</span>
+        <span>{t("handover.now")}</span>
       </div>
     </div>
   );

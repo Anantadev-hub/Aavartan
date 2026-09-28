@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { LANGS, loadLang, saveLang, translate, type Lang } from "./i18n";
+import { loadLang, saveLang, translateVars, type Lang } from "./i18n";
 
 // ---------------------------------------------------------------------------
 // App-wide client state: language, online status, offline sync queue, toasts.
@@ -32,7 +32,7 @@ type SyncState = "idle" | "syncing" | "done";
 type AppContextValue = {
   lang: Lang;
   setLang: (l: Lang) => void;
-  t: (key: string) => string;
+  t: (key: string, vars?: Record<string, string | number>) => string;
   online: boolean;
   queue: QueuedDraft[];
   enqueueDraft: (d: Omit<QueuedDraft, "clientRef">) => void;
@@ -216,10 +216,14 @@ import { useSyncExternalStore } from "react";
 export function useAppState(): AppContextValue {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  const t = useCallback((key: string) => translate(snapshot.lang, key), [snapshot.lang]);
+  const lang = snapshot.lang;
+  const t = useCallback(
+    (key: string, vars?: Record<string, string | number>) => translateVars(lang, key, vars),
+    [lang],
+  );
 
   return {
-    lang: snapshot.lang,
+    lang,
     setLang,
     t,
     online: snapshot.online,
@@ -304,16 +308,13 @@ export function useSyncWorker(
 
       const remaining = store.queue.length;
       if (remaining === 0 && !hardFail) {
-        setSyncState("done", `${syncedTotal} records synced successfully.`);
+        setSyncState("done", translateVars(store.lang, "sync.done", { n: syncedTotal }));
         setTimeout(() => setSyncState("idle"), 2600);
       } else {
         store.syncCooldownUntil = Date.now() + SYNC_COOLDOWN_MS;
         setSyncState("idle");
         if (hardFail) {
-          pushToast(
-            "Some records couldn't sync — they stay saved on this device.",
-            "error",
-          );
+          pushToast(translateVars(store.lang, "sync.someFailed"), "error");
         }
       }
     })();

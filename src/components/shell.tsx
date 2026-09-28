@@ -20,6 +20,7 @@ export function AppHeader({
   right?: ReactNode;
   onBack?: () => void;
 }) {
+  const { t } = useAppState();
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       {/* min-h-14 + px-4 keeps a 56px compact app bar with ≥44px touch targets */}
@@ -27,7 +28,7 @@ export function AppHeader({
         {onBack && (
           <button
             onClick={onBack}
-            aria-label="Go back"
+            aria-label={t("auth.back")}
             className="flex size-11 items-center justify-center rounded-full text-navy transition-colors hover:bg-muted active:bg-muted clay-pressable"
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -54,7 +55,7 @@ export function BottomNav({ active, onNavigate }: { active: NavTab; onNavigate: 
     { tab: "profile", label: t("nav.profile"), icon: UserIcon },
   ];  return (
     <nav
-      aria-label="Primary"
+      aria-label={t("nav.home")}
       className="sticky bottom-0 z-40 mt-auto border-t border-[var(--border)] bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/85"
     >
       <div className="mx-auto grid max-w-md grid-cols-5 items-end px-2 pt-1.5">

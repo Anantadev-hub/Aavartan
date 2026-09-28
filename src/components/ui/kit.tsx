@@ -129,9 +129,9 @@ export function StatusPill({ status }: { status: string }) {
     rejected: { tone: "red", label: t("status.rejected") },
     handed_over: { tone: "blue", label: t("status.handed_over") },
     completed: { tone: "green", label: t("status.completed") },
-    pending: { tone: "amber", label: "Pending" },
+    pending: { tone: "amber", label: t("status.pending") },
     completed_payment: { tone: "green", label: t("payment.completed") },
-    none: { tone: "neutral", label: "—" },
+    none: { tone: "neutral", label: t("common.dash") },
   };
   const v = map[status] ?? map.none;
   return <ClayBadge tone={v.tone}>{v.label}</ClayBadge>;
@@ -185,10 +185,11 @@ export function EmptyState({
 }
 
 export function LoadingState({ label }: { label?: string }) {
+  const { t } = useAppState();
   return (
     <div className="flex flex-col items-center gap-3 py-14 text-muted2">
       <div className="size-10 animate-spin rounded-full border-4 border-teal/25 border-t-teal" />
-      <p className="text-sm">{label ?? "Loading…"}</p>
+      <p className="text-sm">{label ?? t("common.loading")}</p>
     </div>
   );
 }
@@ -203,18 +204,18 @@ export function OfflineBanner() {
       <CloudOffIcon className="size-4.5" />
       <span>
         {t("common.offline")} — {t("add.offlineNote")}
-        {queue.length > 0 ? ` (${queue.length} queued)` : ""}
+        {queue.length > 0 ? ` (${t("sync.queued", { n: queue.length })})` : ""}
       </span>
     </div>
   );
 }
 
 export function SyncIndicator() {
-  const { online, queue, syncState, lastSyncMessage } = useAppState();
+  const { online, queue, syncState, lastSyncMessage, t } = useAppState();
   if (syncState === "syncing") {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal">
-        <RefreshIcon className="size-4 animate-spin" /> Syncing…
+        <RefreshIcon className="size-4 animate-spin" /> {t("sync.syncing")}
       </span>
     );
   }
@@ -233,17 +234,9 @@ export function SyncIndicator() {
       )}
     >
       {online ? <CloudUpIcon className="size-4" /> : <CloudOffIcon className="size-4" />}
-      {online ? t0onlineLabel() : t0offlineLabel(queue)}
+      {online ? t("common.online") : queue.length > 0 ? t("sync.queued", { n: queue.length }) : t("common.offline")}
     </span>
   );
-}
-
-function t0onlineLabel() {
-  return "Online";
-}
-
-function t0offlineLabel(queue: unknown[]) {
-  return queue.length > 0 ? `Offline — ${queue.length} waiting` : "Offline";
 }
 
 /* ------------------------------ Toasts ---------------------------------- */
