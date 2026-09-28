@@ -1,9 +1,9 @@
-# ♻ Kabadiwala Connect
+# ♻ Aavartan 
 
 **Bringing informal collectors into the formal recycling chain.**
 *SIH 2026 · Problem Statement SIH26229 · Clean & Green Technology*
 
-Kabadiwala Connect is a two-sided e-waste platform: a **mobile-first collector app** for kabadiwalas
+Aavartan is a two-sided e-waste platform: a **mobile-first collector app** for kabadiwalas
 (photo → AI material ID → indicative price → recycler matching → digital lot → verified handover →
 earnings) and an **operations portal** for authorized recyclers (incoming lots → quote → handover →
 payment). One coherent ecosystem with a single transaction record flowing between both sides.
