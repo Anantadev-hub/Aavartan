@@ -10,7 +10,7 @@ payment). One coherent ecosystem with a single transaction record flowing betwee
 
 ---
 
-## ⚠️ Honest scope statement (read first)
+## ⚠️ Scope Statement
 
 This is a **prototype**. Wherever a capability is mocked, the UI and code say so:
 
