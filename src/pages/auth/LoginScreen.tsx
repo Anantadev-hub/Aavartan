@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router";
-import { useAuthActions } from "@convex-dev/auth/react";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { RecycleIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useAppState, setLang as applyLang } from "@/lib/app-state";
@@ -12,7 +9,6 @@ import {
   formatMasked,
   isValidMobile,
   loadLastAuth,
-  markPendingProfileSynced,
   saveLastAuth,
   savePendingProfile,
   type OnboardData,
@@ -49,8 +45,6 @@ export default function LoginScreen() {
   const preselectRole: Role | null =
     params.get("role") === "recycler" ? "recycler" : params.get("role") === "collector" ? "collector" : null;
   const { online } = useAppState();
-  const { signIn, signOut } = useAuthActions();
-  const createProfile = useMutation(api.profiles.createProfile);
 
   const [step, setStep] = useState<Step>({ s: "login" });
   const [mobile, setMobile] = useState("");
@@ -109,31 +103,12 @@ export default function LoginScreen() {
     // 2) Navigate to the app without any network dependency.
     navigate(r === "collector" ? "/app" : "/recycler", { replace: true });
 
-    // 3) Best-effort background sync when actually reachable.
-    if (navigator.onLine) {
-      void (async () => {
-        try {
-          try {
-            await signOut();
-          } catch {
-            /* no existing session — fine */
-          }
-          await signIn("anonymous");
-          // Spec §15/§16 onboarding fields persist to the backend profile.
-          await createProfile({
-            role: r,
-            name,
-            phone: data.phone ?? mobile,
-            preferredLanguage: (data.language as "en" | "hi" | "mr" | undefined) ?? undefined,
-            collectionArea: data.area,
-          });
-          markPendingProfileSynced();
-        } catch {
-          // Backend unreachable (e.g. Wi-Fi off but navigator.onLine true):
-          // the profile stays "Pending Sync" locally. Never blocks the user.
-        }
-      })();
-    }
+    // 3) Background backend sync is owned ENTIRELY by the reactive
+    //    usePendingProfileSync() in the app shells. LoginScreen used to run its
+    //    own signOut → signIn("anonymous") → createProfile pipeline here, which
+    //    raced the shell's pipeline (sign-out tore down a live/hydrating
+    //    session, double-created profiles, wedged the app on "Syncing…") and
+    //    was the root cause of stuck initialisation. One pipeline only.
   };
 
   const stepIndex =

@@ -171,6 +171,18 @@ export function setSyncState(state: SyncState, message?: string) {
   emit();
 }
 
+/** Upper bound on one sync round (batch + draft-by-draft fallback). */
+const SYNC_ROUND_TIMEOUT_MS = 25_000;
+/** Reserved handle for cancelling a hung round (timeout path uses it). */
+let syncAbort: (() => void) | null = null;
+
+/** Cancel/abandon any hung sync round bookkeeping (defensive no-op today). */
+export function abortSyncRound() {
+  const fn = syncAbort;
+  syncAbort = null;
+  fn?.();
+}
+
 export function pushToast(message: string, tone: Toast["tone"] = "info") {
   const id = Date.now() + Math.random();
   store.toasts = [...store.toasts, { id, message, tone }];
@@ -278,23 +290,50 @@ export function useSyncWorker(
       const succeeded: string[] = [];
       let syncedTotal = 0;
       let hardFail = false;
+      let lastError: string | null = null;
+
+      // Race every network call against a timeout: the loser path throws so
+      // the normal failure handling (attempts/cooldown/retry) still applies,
+      // and the worker can never be held hostage by a hung request.
+      const withTimeout = async <T,>(p: Promise<T>): Promise<T> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([
+            p,
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error("Sync round timed out")),
+                SYNC_ROUND_TIMEOUT_MS,
+              );
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+
       try {
         // Fast path: one batch.
-        const res = await onSync(snapshot);
+        const res = await withTimeout(onSync(snapshot));
         syncedTotal = res.synced;
         for (const d of snapshot) succeeded.push(d.clientRef);
-      } catch {
+      } catch (err) {
+        // Record the actual failure (console for diagnosis) before falling
+        // back to draft-by-draft isolation.
+        lastError = err instanceof Error ? err.message : String(err);
+        console.warn("[sync] batch sync failed:", lastError);
         // Fallback: draft-by-draft isolation.
         syncedTotal = 0;
         succeeded.length = 0;
         for (const d of snapshot) {
           try {
-            const res = await onSync([d]);
+            const res = await withTimeout(onSync([d]));
             syncedTotal += res.synced;
             succeeded.push(d.clientRef);
             clearAttempts(d.clientRef);
-          } catch {
+          } catch (draftErr) {
             const attempts = bumpAttempts(d.clientRef);
+            lastError = draftErr instanceof Error ? draftErr.message : String(draftErr);
             if (attempts >= MAX_ATTEMPTS) hardFail = true;
           }
         }
@@ -305,14 +344,17 @@ export function useSyncWorker(
         clearAttempts(ref);
       }
       store.syncInProgress = false;
+      syncAbort = null;
 
       const remaining = store.queue.length;
       if (remaining === 0 && !hardFail) {
         setSyncState("done", translateVars(store.lang, "sync.done", { n: syncedTotal }));
         setTimeout(() => setSyncState("idle"), 2600);
       } else {
+        // Failure: stop the syncing state, keep the queue, cool down, retry
+        // safely. The real error is logged for diagnosis.
         store.syncCooldownUntil = Date.now() + SYNC_COOLDOWN_MS;
-        setSyncState("idle");
+        setSyncState("idle", lastError ?? undefined);
         if (hardFail) {
           pushToast(translateVars(store.lang, "sync.someFailed"), "error");
         }

@@ -168,8 +168,20 @@ export function hasBackendId(
  * "pending-sync" phase) and retries with backoff until the backend record
  * exists. It NEVER destroys a verified session: when already authenticated it
  * calls createProfile directly and the backend dedupes onto that identity.
+ *
+ * Reliability rules (bug fix):
+ *  - SINGLE FLIGHT: a module-level flag spans effect re-runs, so StrictMode
+ *    double-mounts and re-renders can never start a second createProfile while
+ *    one is in flight (the previous code could fire two concurrent pipelines).
+ *  - BOUNDED: a hard attempt cap applies regardless of auth state — the old
+ *    guard only blocked retries while NOT authenticated, so an authenticated
+ *    session whose createProfile kept failing retried every 3 s forever.
+ *  - When there is nothing to sync (no unsynced pending profile) the hook is
+ *    inert; it never sets any sync state and never spins.
  */
 const MAX_PENDING_SYNC_ATTEMPTS = 5;
+/** True from dispatch until settle, across every effect re-run. */
+let pendingSyncInFlight = false;
 
 export function usePendingProfileSync() {
   const { signIn, signOut } = useAuthActions();
@@ -181,13 +193,22 @@ export function usePendingProfileSync() {
 
   useEffect(() => {
     const p = loadPendingProfile();
+    // Nothing to sync → immediately inert (no timers, no loop, no sync state).
     if (!p || p.synced) return;
     if (!online) return;
     if (isLoading) return; // auth hydrating — wait, never act on a stale flag
-    if (!isAuthenticated && attempts >= MAX_PENDING_SYNC_ATTEMPTS) return;
+    // Hard cap in BOTH auth states: a permanently failing backend must stop
+    // retrying instead of looping every 3 s forever.
+    if (attempts >= MAX_PENDING_SYNC_ATTEMPTS) return;
+    // Single flight: another run already dispatched this profile sync. Re-arm
+    // nothing here — the in-flight run bumps attempts/tick when it settles.
+    if (pendingSyncInFlight) return;
+
     let cancelled = false;
     const timer = window.setTimeout(
       () => {
+        if (pendingSyncInFlight) return; // re-check at fire time
+        pendingSyncInFlight = true;
         void (async () => {
           try {
             // Only sign in when there is genuinely NO session. Signing out a
@@ -212,10 +233,13 @@ export function usePendingProfileSync() {
               preferredLanguage: (p.language as "en" | "hi" | "mr" | undefined) ?? undefined,
               collectionArea: p.area,
             });
+            pendingSyncInFlight = false;
             if (!cancelled) markPendingProfileSynced();
           } catch {
-            // Backend unreachable or transient failure: retry with backoff —
-            // never leave the profile (and every dependent query) stuck.
+            // Backend unreachable or transient failure: record the failure,
+            // release single-flight, retry with backoff — never leave the
+            // profile (and every dependent query) stuck, never loop hot.
+            pendingSyncInFlight = false;
             if (!cancelled) {
               setAttempts((a) => a + 1);
               setTick((t) => t + 1);
@@ -249,6 +273,9 @@ export function usePendingProfileSync() {
  * repair is needed so the hook stays idle.
  */
 const MAX_BINDING_REPAIR_ATTEMPTS = 5;
+/** Single-flight guard for the facility-binding repair (same rationale as the
+ *  pending-profile sync: StrictMode and re-renders must not double-fire). */
+let bindingRepairInFlight = false;
 
 export function useRecyclerBindingRepair(options: { enabled?: boolean } = {}) {
   const { isAuthenticated } = useConvexAuth();
@@ -261,12 +288,16 @@ export function useRecyclerBindingRepair(options: { enabled?: boolean } = {}) {
     if (options.enabled === false) return;
     if (!isAuthenticated || !online) return;
     if (attempts >= MAX_BINDING_REPAIR_ATTEMPTS) return;
+    if (bindingRepairInFlight) return;
     let cancelled = false;
     const timer = window.setTimeout(
       () => {
+        if (bindingRepairInFlight) return;
+        bindingRepairInFlight = true;
         void (async () => {
           try {
             const p = await ensure({});
+            bindingRepairInFlight = false;
             if (!cancelled && p && !p.recyclerId) {
               // Profile still unbound (facility seed may not have landed yet):
               // retry with backoff instead of giving up silently.
@@ -274,6 +305,9 @@ export function useRecyclerBindingRepair(options: { enabled?: boolean } = {}) {
               setTick((t) => t + 1);
             }
           } catch {
+            // Record the failure, release single-flight, backoff-retry — a
+            // transient failure must never wedge the portal in "syncing".
+            bindingRepairInFlight = false;
             if (!cancelled) {
               setAttempts((a) => a + 1);
               setTick((t) => t + 1);
